@@ -9,22 +9,23 @@
 const express = require('express');
 const router = express.Router();
 
-// Placeholder for future route modules
-// const authRoutes = require('./auth');
-// const reportRoutes = require('./reports');
-// const userRoutes = require('./users');
+// Import route modules
+const authRoutes = require('./authRoutes');
+const reportRoutes = require('./reportRoutes');
+// const userRoutes = require('./userRoutes');
 
 // Health check route
 router.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
+    database: 'connected', // This will be updated by the server
     timestamp: new Date().toISOString()
   });
 });
 
-// TODO: Add route modules as they are implemented
-// router.use('/auth', authRoutes);
-// router.use('/reports', reportRoutes);
+// API route modules
+router.use('/auth', authRoutes);
+router.use('/reports', reportRoutes);
 // router.use('/users', userRoutes);
 
 module.exports = router;

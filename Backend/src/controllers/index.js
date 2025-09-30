@@ -8,11 +8,11 @@
 
 // Import controller modules
 const authController = require('./authController');
-// const reportController = require('./reportController');
+const reportController = require('./reportController');
 // const userController = require('./userController');
 
 module.exports = {
   authController,
-  // reportController,
+  reportController,
   // userController
 };

@@ -22,8 +22,7 @@ const mongoose = require('mongoose');
 const reportSchema = new mongoose.Schema({
   // User identification (B-01 - Authentication)
   userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    type: String, // Changed to String for mock authentication
     required: true,
     index: true
   },
