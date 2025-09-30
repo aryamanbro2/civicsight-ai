@@ -250,7 +250,7 @@ const createReport = async (req, res) => {
 };
 
 /**
- * Get user's reports
+ * Get user's reports (alias for getUserReports)
  * GET /api/reports
  * 
  * @param {Object} req - Express request object
@@ -315,6 +315,116 @@ const getUserReports = async (req, res) => {
       error: 'Report retrieval failed',
       message: 'Internal server error while fetching reports',
       code: 'REPORT_RETRIEVAL_ERROR'
+    });
+  }
+};
+
+/**
+ * Get user's reports (my reports endpoint)
+ * GET /api/reports/my
+ * 
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const getMyReports = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { page = 1, limit = 20, status, issueType, priority } = req.query;
+
+    // Build query for user's reports
+    const query = { userId: userId };
+    
+    // Add optional filters
+    if (status) {
+      query.status = status;
+    }
+    if (issueType) {
+      query.issueType = issueType;
+    }
+    if (priority) {
+      query.priority = priority;
+    }
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const limitNum = parseInt(limit);
+
+    // Get reports with pagination, sorted by creation date descending
+    const reports = await Report.find(query)
+      .sort({ submittedAt: -1 }) // Sort by creation date descending
+      .skip(skip)
+      .limit(limitNum)
+      .select('-metadata.ipAddress -metadata.userAgent'); // Exclude sensitive data
+
+    // Get total count for pagination
+    const totalCount = await Report.countDocuments(query);
+
+    // Get summary statistics
+    const statusCounts = await Report.aggregate([
+      { $match: { userId: userId } },
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+
+    const priorityCounts = await Report.aggregate([
+      { $match: { userId: userId } },
+      { $group: { _id: '$priority', count: { $sum: 1 } } }
+    ]);
+
+    const issueTypeCounts = await Report.aggregate([
+      { $match: { userId: userId } },
+      { $group: { _id: '$issueType', count: { $sum: 1 } } }
+    ]);
+
+    console.log(`📊 Retrieved ${reports.length} reports for user ${userId} (my reports)`);
+
+    res.json({
+      message: 'My reports retrieved successfully',
+      reports: reports.map(report => ({
+        id: report._id,
+        issueType: report.issueType,
+        severityScore: report.severityScore,
+        description: report.description,
+        location: report.location,
+        media: report.media,
+        status: report.status,
+        priority: report.priority,
+        tags: report.tags,
+        assignedTo: report.assignedTo,
+        resolution: report.resolution,
+        submittedAt: report.submittedAt,
+        lastUpdatedAt: report.lastUpdatedAt,
+        fullAddress: report.fullAddress,
+        ageInDays: report.ageInDays
+      })),
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalCount / limitNum),
+        totalCount,
+        hasNext: skip + limitNum < totalCount,
+        hasPrev: page > 1
+      },
+      statistics: {
+        statusBreakdown: statusCounts.reduce((acc, item) => {
+          acc[item._id] = item.count;
+          return acc;
+        }, {}),
+        priorityBreakdown: priorityCounts.reduce((acc, item) => {
+          acc[item._id] = item.count;
+          return acc;
+        }, {}),
+        issueTypeBreakdown: issueTypeCounts.reduce((acc, item) => {
+          acc[item._id] = item.count;
+          return acc;
+        }, {})
+      }
+    });
+
+  } catch (error) {
+    console.error('Get my reports error:', error);
+    res.status(500).json({
+      error: 'Report retrieval failed',
+      message: 'Internal server error while fetching my reports',
+      code: 'MY_REPORTS_RETRIEVAL_ERROR'
     });
   }
 };
@@ -466,6 +576,7 @@ const updateReportStatus = async (req, res) => {
 module.exports = {
   createReport,
   getUserReports,
+  getMyReports,
   getReportById,
   updateReportStatus
 };

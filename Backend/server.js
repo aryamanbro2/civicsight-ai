@@ -216,6 +216,7 @@ app.get('/api/auth/users', authController.getAllUsers); // For testing purposes
 // Report API routes (B-05, B-06)
 app.post('/api/reports', authMiddleware.authenticateToken, reportController.createReport);
 app.get('/api/reports', authMiddleware.authenticateToken, reportController.getUserReports);
+app.get('/api/reports/my', authMiddleware.authenticateToken, reportController.getMyReports);
 app.get('/api/reports/:id', authMiddleware.authenticateToken, reportController.getReportById);
 app.put('/api/reports/:id/status', authMiddleware.authenticateToken, reportController.updateReportStatus);
 
@@ -240,6 +241,7 @@ app.use('*', (req, res) => {
       'GET /api/auth/users',
       'POST /api/reports (requires Authorization header)',
       'GET /api/reports (requires Authorization header)',
+      'GET /api/reports/my (requires Authorization header)',
       'GET /api/reports/:id (requires Authorization header)',
       'PUT /api/reports/:id/status (requires Authorization header)'
     ]
