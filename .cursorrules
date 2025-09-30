@@ -1,0 +1,43 @@
+CivicSight AI Project Rules (Non-ML Phase)
+
+1. ARCHITECTURAL & TECHNOLOGY CONSTRAINTS
+Tech Stack: Express.js/Node.js, MongoDB, React Native + NativeWind (Mobile App)
+Language: JAVASCRIPT (.js) only. DO NOT use TypeScript.
+Project Structure: All backend code must be in the 'backend' folder. All frontend code must be in the 'frontend' folder.
+Database: MongoDB. Use Mongoose for schemas.
+Styling: Use NativeWind classes for React Native components.
+ON_ANY_EDIT: |
+
+Before generating code, READ the PRD (CivicSightAI_PRD.pdf) and existing file structure.
+Ensure all new files fit within the Express/React Native architecture.
+Use JAVASCRIPT (.js) for all files.
+Use functional components and hooks for React Native.
+
+2. SCOPE & ML EXCLUSION (CRITICAL)
+ON_ANY_EDIT: |
+
+The scope is RESTRICTED to the non-ML features: Auth (B-01), Data Storage (B-05, B-06), Mobile Frontend (M-01, M-03, M-05, M-06).
+The Authority Web Dashboard (D-01 to D-06) is EXCLUDED from the current scope.
+NEVER generate code for features B-02 (AI Image Classification), B-03 (Speech-to-Structured NLP), or B-04 (Severity & Priority Scoring).
+Instead, use placeholder logic in the backend for issueType and severityScore (e.g., hardcoded values).
+For media handling (B-06), use placeholder URLs (e.g., 'https://mock-s3/report-id.jpg').
+
+3. QUALITY & TDD GUIDELINES
+ON_ANY_EDIT: |
+
+Adopt a Test-Driven Development (TDD) approach: Outline or write acceptance tests for new features (e.g., API endpoints, core React component logic) BEFORE implementation.
+All functions must include JSDoc comments explaining purpose, parameters, and return types.
+Use error handling (try/catch) for all database and API interactions.
+Code must be clean, modular, and adhere to SOLID principles.
+
+4. AVOID REGRESSIONS
+ON_ANY_EDIT: |
+
+Do NOT modify or refactor existing, working code unless the current task explicitly requires it.
+Limit changes to the file currently being worked on. Do not inadvertently touch other files.
+
+5. CONTEXT MANAGEMENT
+ON_CHAT: |
+
+If the request spans multiple files, start by generating a plan in a markdown file (planner role) listing the files to be created/edited and the steps.
+Reference specific PRD Feature IDs (e.g., M-06, B-01) in all generated code comments for traceability.
