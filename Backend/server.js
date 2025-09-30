@@ -19,6 +19,9 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 
+// Import models
+const { Report } = require('./src/models');
+
 // Initialize Express app
 const app = express();
 
@@ -94,6 +97,57 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Test route to verify Report model (B-05)
+app.get('/api/test-report', async (req, res) => {
+  try {
+    // Create a test report to verify the model works
+    const testReport = new Report({
+      userId: new mongoose.Types.ObjectId(), // Mock user ID
+      issueType: 'pothole',
+      severityScore: 4,
+      description: 'Large pothole on Main Street causing traffic issues',
+      location: {
+        latitude: 40.7128,
+        longitude: -74.0060,
+        address: '123 Main Street',
+        city: 'New York',
+        state: 'NY',
+        zipCode: '10001'
+      },
+      status: 'submitted',
+      priority: 'high',
+      tags: ['road', 'safety', 'traffic'],
+      metadata: {
+        source: 'mobile_app',
+        deviceInfo: {
+          platform: 'iOS',
+          version: '1.0.0',
+          model: 'iPhone 14'
+        }
+      }
+    });
+
+    // Save the test report
+    await testReport.save();
+    
+    res.json({
+      message: 'Report model test successful',
+      report: testReport.toJSON(),
+      modelInfo: {
+        schemaFields: Object.keys(Report.schema.paths),
+        indexes: Report.schema.indexes().length,
+        virtuals: Object.keys(Report.schema.virtuals)
+      }
+    });
+  } catch (error) {
+    console.error('Report model test error:', error);
+    res.status(500).json({
+      error: 'Report model test failed',
+      message: error.message
+    });
+  }
+});
+
 // 404 handler for undefined routes
 app.use('*', (req, res) => {
   res.status(404).json({
@@ -101,7 +155,8 @@ app.use('*', (req, res) => {
     message: `Cannot ${req.method} ${req.originalUrl}`,
     availableRoutes: [
       'GET /',
-      'GET /api/health'
+      'GET /api/health',
+      'GET /api/test-report'
     ]
   });
 });
