@@ -4,138 +4,86 @@
  * 
  * Features implemented:
  * - NativeWind integration for Tailwind CSS
- * - Placeholder screen with styling
- * - Ready for M-01, M-03, M-05, M-06 features
+ * - M-01: Seamless Onboarding with phone number authentication
+ * - React Navigation with tab-based navigation
+ * - Secure token storage with AsyncStorage
+ * - Tab navigation: Report Issue and My Reports
+ * - Ready for M-03, M-05, M-06 features
  * 
  * @author CivicSight AI Team
  * @version 1.0.0
  */
 
-import React from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  Text,
-  View,
-  TouchableOpacity,
-  Image,
-} from 'react-native';
+import React, { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import AppNavigator from './src/navigation/AppNavigator';
 import './global.css';
 
 const App = () => {
-  return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-      <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  /**
+   * Check if user is already authenticated on app start
+   */
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  /**
+   * Check authentication status from stored data
+   */
+  const checkAuthStatus = async () => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      const userData = await AsyncStorage.getItem('userData');
       
-      <ScrollView className="flex-1">
-        {/* Header */}
-        <View className="bg-white shadow-sm border-b border-gray-200">
-          <View className="px-6 py-4">
-            <Text className="text-2xl font-bold text-gray-900">
-              CivicSight AI
-            </Text>
-            <Text className="text-sm text-gray-600 mt-1">
-              Citizen Issue Reporting System
-            </Text>
-          </View>
-        </View>
+      if (token && userData) {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+        setIsAuthenticated(true);
+        console.log('✅ User already authenticated:', parsedUser.id);
+      }
+    } catch (error) {
+      console.error('Auth check error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-        {/* Main Content */}
-        <View className="flex-1 px-6 py-8">
-          {/* Welcome Section */}
-          <View className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-            <View className="items-center mb-6">
-              <View className="w-20 h-20 bg-primary-100 rounded-full items-center justify-center mb-4">
-                <Text className="text-3xl">🏛️</Text>
-              </View>
-              <Text className="text-xl font-semibold text-gray-900 text-center">
-                Welcome to CivicSight AI
-              </Text>
-              <Text className="text-gray-600 text-center mt-2 leading-5">
-                Report civic issues and track their resolution in real-time
-              </Text>
-            </View>
+  /**
+   * Handle successful login
+   * @param {Object} userData - User data from API
+   * @param {string} token - Authentication token
+   */
+  const handleLoginSuccess = (userData, token) => {
+    setUser(userData);
+    setIsAuthenticated(true);
+    console.log('✅ Login successful, navigating to main app with tabs');
+  };
 
-            {/* Feature Cards */}
-            <View className="space-y-4">
-              <View className="bg-primary-50 rounded-lg p-4 border border-primary-200">
-                <View className="flex-row items-center">
-                  <View className="w-10 h-10 bg-primary-500 rounded-lg items-center justify-center mr-3">
-                    <Text className="text-white text-lg">📱</Text>
-                  </View>
-                  <View className="flex-1">
-                    <Text className="font-semibold text-gray-900">
-                      Mobile Reporting
-                    </Text>
-                    <Text className="text-sm text-gray-600">
-                      Report issues with photos and location
-                    </Text>
-                  </View>
-                </View>
-              </View>
+  /**
+   * Handle user logout
+   */
+  const handleLogout = () => {
+    setUser(null);
+    setIsAuthenticated(false);
+    console.log('✅ User logged out, returning to login screen');
+  };
 
-              <View className="bg-green-50 rounded-lg p-4 border border-green-200">
-                <View className="flex-row items-center">
-                  <View className="w-10 h-10 bg-green-500 rounded-lg items-center justify-center mr-3">
-                    <Text className="text-white text-lg">🤖</Text>
-                  </View>
-                  <View className="flex-1">
-                    <Text className="font-semibold text-gray-900">
-                      AI-Powered Analysis
-                    </Text>
-                    <Text className="text-sm text-gray-600">
-                      Automatic issue classification and priority
-                    </Text>
-                  </View>
-                </View>
-              </View>
+  // Show loading screen while checking authentication
+  if (isLoading) {
+    return null; // You could add a loading spinner here
+  }
 
-              <View className="bg-orange-50 rounded-lg p-4 border border-orange-200">
-                <View className="flex-row items-center">
-                  <View className="w-10 h-10 bg-orange-500 rounded-lg items-center justify-center mr-3">
-                    <Text className="text-white text-lg">📊</Text>
-                  </View>
-                  <View className="flex-1">
-                    <Text className="font-semibold text-gray-900">
-                      Real-time Tracking
-                    </Text>
-                    <Text className="text-sm text-gray-600">
-                      Track your reports and get updates
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          {/* Action Buttons */}
-          <View className="space-y-3">
-            <TouchableOpacity className="bg-primary-600 rounded-xl py-4 px-6 shadow-sm">
-              <Text className="text-white text-center font-semibold text-lg">
-                Get Started
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity className="bg-white border border-gray-300 rounded-xl py-4 px-6 shadow-sm">
-              <Text className="text-gray-700 text-center font-semibold text-lg">
-                Learn More
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Status Section */}
-          <View className="mt-8 bg-gray-100 rounded-xl p-4">
-            <Text className="text-sm text-gray-600 text-center">
-              🚀 React Native + NativeWind Setup Complete
-            </Text>
-            <Text className="text-xs text-gray-500 text-center mt-1">
-              Ready for M-01, M-03, M-05, M-06 implementation
-            </Text>
-          </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+  return (
+    <AppNavigator
+      isAuthenticated={isAuthenticated}
+      user={user}
+      onLoginSuccess={handleLoginSuccess}
+      onLogout={handleLogout}
+    />
   );
 };
 
