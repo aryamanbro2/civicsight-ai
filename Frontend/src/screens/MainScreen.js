@@ -25,7 +25,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import '../global.css';
 
-const MainScreen = ({ user, onLogout }) => {
+const MainScreen = ({ user, onLogout, navigation }) => {
   /**
    * Handle user logout
    * Clear stored data and return to login screen
@@ -180,13 +180,19 @@ const MainScreen = ({ user, onLogout }) => {
 
           {/* Action Buttons */}
           <View className="space-y-3">
-            <TouchableOpacity className="bg-primary-600 rounded-xl py-4 px-6 shadow-sm">
+            <TouchableOpacity 
+              className="bg-primary-600 rounded-xl py-4 px-6 shadow-sm"
+              onPress={() => navigation?.navigate('ReportIssue')}
+            >
               <Text className="text-white text-center font-semibold text-lg">
                 Report New Issue
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity className="bg-white border border-gray-300 rounded-xl py-4 px-6 shadow-sm">
+            <TouchableOpacity 
+              className="bg-white border border-gray-300 rounded-xl py-4 px-6 shadow-sm"
+              onPress={() => navigation?.navigate('MyReports')}
+            >
               <Text className="text-gray-700 text-center font-semibold text-lg">
                 View My Reports
               </Text>

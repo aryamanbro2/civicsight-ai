@@ -5,8 +5,9 @@
  * Features implemented:
  * - NativeWind integration for Tailwind CSS
  * - M-01: Seamless Onboarding with phone number authentication
+ * - React Navigation with tab-based navigation
  * - Secure token storage with AsyncStorage
- * - Navigation between Login and Main screens
+ * - Tab navigation: Report Issue and My Reports
  * - Ready for M-03, M-05, M-06 features
  * 
  * @author CivicSight AI Team
@@ -15,8 +16,7 @@
 
 import React, { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import LoginScreen from './src/screens/LoginScreen';
-import MainScreen from './src/screens/MainScreen';
+import AppNavigator from './src/navigation/AppNavigator';
 import './global.css';
 
 const App = () => {
@@ -60,7 +60,7 @@ const App = () => {
   const handleLoginSuccess = (userData, token) => {
     setUser(userData);
     setIsAuthenticated(true);
-    console.log('✅ Login successful, navigating to main screen');
+    console.log('✅ Login successful, navigating to main app with tabs');
   };
 
   /**
@@ -77,19 +77,12 @@ const App = () => {
     return null; // You could add a loading spinner here
   }
 
-  // Show main screen if authenticated, login screen otherwise
-  if (isAuthenticated && user) {
-    return (
-      <MainScreen 
-        user={user} 
-        onLogout={handleLogout}
-      />
-    );
-  }
-
   return (
-    <LoginScreen 
+    <AppNavigator
+      isAuthenticated={isAuthenticated}
+      user={user}
       onLoginSuccess={handleLoginSuccess}
+      onLogout={handleLogout}
     />
   );
 };
