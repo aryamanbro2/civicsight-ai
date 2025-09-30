@@ -17,6 +17,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
 import ReportIssueScreen from '../screens/ReportIssueScreen';
 import MyReportsScreen from '../screens/MyReportsScreen';
+import ReportSubmissionScreen from '../screens/ReportSubmissionScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -49,7 +50,19 @@ const TabNavigator = () => {
         name="ReportIssue"
         component={ReportIssueScreen}
         options={{
-          tabBarLabel: 'Report Issue',
+          tabBarLabel: 'Home',
+          tabBarIcon: ({ color, size }) => (
+            <Text style={{ color, fontSize: size || 24 }}>
+              🏠
+            </Text>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="ReportSubmission"
+        component={ReportSubmissionScreen}
+        options={{
+          tabBarLabel: 'Quick Report',
           tabBarIcon: ({ color, size }) => (
             <Text style={{ color, fontSize: size || 24 }}>
               📝

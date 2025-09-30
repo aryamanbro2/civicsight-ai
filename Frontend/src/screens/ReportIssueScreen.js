@@ -110,9 +110,12 @@ const ReportIssueScreen = ({ navigation }) => {
 
           {/* Action Buttons */}
           <View className="space-y-3">
-            <TouchableOpacity className="bg-primary-600 rounded-xl py-4 px-6 shadow-sm">
+            <TouchableOpacity 
+              className="bg-primary-600 rounded-xl py-4 px-6 shadow-sm"
+              onPress={() => navigation.navigate('ReportSubmission')}
+            >
               <Text className="text-white text-center font-semibold text-lg">
-                Start New Report
+                📝 Quick Report
               </Text>
             </TouchableOpacity>
 
@@ -121,7 +124,7 @@ const ReportIssueScreen = ({ navigation }) => {
               onPress={() => navigation.navigate('MyReports')}
             >
               <Text className="text-gray-700 text-center font-semibold text-lg">
-                View My Reports
+                📋 View My Reports
               </Text>
             </TouchableOpacity>
           </View>

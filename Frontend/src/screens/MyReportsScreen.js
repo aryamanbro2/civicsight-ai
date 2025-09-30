@@ -112,16 +112,16 @@ const MyReportsScreen = ({ navigation }) => {
           <View className="space-y-3">
             <TouchableOpacity 
               className="bg-primary-600 rounded-xl py-4 px-6 shadow-sm"
-              onPress={() => navigation.navigate('ReportIssue')}
+              onPress={() => navigation.navigate('ReportSubmission')}
             >
               <Text className="text-white text-center font-semibold text-lg">
-                Report New Issue
+                📝 Quick Report
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity className="bg-white border border-gray-300 rounded-xl py-4 px-6 shadow-sm">
               <Text className="text-gray-700 text-center font-semibold text-lg">
-                Refresh Reports
+                🔄 Refresh Reports
               </Text>
             </TouchableOpacity>
           </View>
