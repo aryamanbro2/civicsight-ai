@@ -19,8 +19,10 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 
-// Import models
+// Import models, middleware, and controllers
 const { Report } = require('./src/models');
+const { authMiddleware } = require('./src/middleware');
+const { authController } = require('./src/controllers');
 
 // Initialize Express app
 const app = express();
@@ -148,6 +150,69 @@ app.get('/api/test-report', async (req, res) => {
   }
 });
 
+// Authentication test routes
+app.get('/api/auth/test', authMiddleware.authenticateToken, (req, res) => {
+  res.json({
+    message: 'Authentication successful',
+    user: req.user,
+    authInfo: req.authInfo,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/api/auth/optional', authMiddleware.optionalAuth, (req, res) => {
+  res.json({
+    message: 'Optional authentication endpoint',
+    authenticated: !!req.user,
+    user: req.user || null,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/api/auth/admin', authMiddleware.authenticateToken, authMiddleware.requireRole('admin'), (req, res) => {
+  res.json({
+    message: 'Admin access granted',
+    user: req.user,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/api/auth/authority', authMiddleware.authenticateToken, authMiddleware.requireRole(['authority', 'admin']), (req, res) => {
+  res.json({
+    message: 'Authority access granted',
+    user: req.user,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Token generation test route
+app.get('/api/auth/generate-token/:userId', (req, res) => {
+  try {
+    const { userId } = req.params;
+    const token = authMiddleware.generateToken(userId, { expiresIn: '24h' });
+    
+    res.json({
+      message: 'Token generated successfully',
+      token,
+      userId,
+      expiresIn: '24h',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Token generation failed',
+      message: error.message
+    });
+  }
+});
+
+// Authentication API routes (M-01)
+app.post('/api/auth/signup', authController.signup);
+app.post('/api/auth/login', authController.login);
+app.get('/api/auth/profile', authMiddleware.authenticateToken, authController.getProfile);
+app.put('/api/auth/profile', authMiddleware.authenticateToken, authController.updateProfile);
+app.get('/api/auth/users', authController.getAllUsers); // For testing purposes
+
 // 404 handler for undefined routes
 app.use('*', (req, res) => {
   res.status(404).json({
@@ -156,7 +221,17 @@ app.use('*', (req, res) => {
     availableRoutes: [
       'GET /',
       'GET /api/health',
-      'GET /api/test-report'
+      'GET /api/test-report',
+      'GET /api/auth/test (requires Authorization header)',
+      'GET /api/auth/optional',
+      'GET /api/auth/admin (requires admin role)',
+      'GET /api/auth/authority (requires authority/admin role)',
+      'GET /api/auth/generate-token/:userId',
+      'POST /api/auth/signup',
+      'POST /api/auth/login',
+      'GET /api/auth/profile (requires Authorization header)',
+      'PUT /api/auth/profile (requires Authorization header)',
+      'GET /api/auth/users'
     ]
   });
 });

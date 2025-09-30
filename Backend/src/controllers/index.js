@@ -6,13 +6,13 @@
  * @version 1.0.0
  */
 
-// Placeholder for future controller modules
-// const authController = require('./authController');
+// Import controller modules
+const authController = require('./authController');
 // const reportController = require('./reportController');
 // const userController = require('./userController');
 
 module.exports = {
-  // authController,
+  authController,
   // reportController,
   // userController
 };

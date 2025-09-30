@@ -6,13 +6,13 @@
  * @version 1.0.0
  */
 
-// Placeholder for future middleware modules
-// const authMiddleware = require('./authMiddleware');
+// Import middleware modules
+const authMiddleware = require('./auth');
 // const validationMiddleware = require('./validationMiddleware');
 // const errorMiddleware = require('./errorMiddleware');
 
 module.exports = {
-  // authMiddleware,
+  authMiddleware,
   // validationMiddleware,
   // errorMiddleware
 };
