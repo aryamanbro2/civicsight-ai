@@ -1,45 +1,50 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React from 'react';
+import { StatusBar } from 'expo-status-bar';
+import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
+import AuthScreen from './src/screens/AuthScreen';
+import DashboardScreen from './src/screens/DashboardScreen';
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+const LoadingScreen: React.FC = () => (
+  <View style={styles.loadingContainer}>
+    <ActivityIndicator size="large" color="#8B5CF6" />
+  </View>
+);
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+// Create a separate component for the main app logic
+const MainApp: React.FC = () => {
+  const { isAuthenticated, isLoading } = useAuth();
 
-  return (
-    <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
-    </SafeAreaProvider>
-  );
-}
-
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
 
   return (
     <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
+      <StatusBar style="auto" />
+      {isAuthenticated ? <DashboardScreen /> : <AuthScreen />}
     </View>
+  );
+};
+
+// Wrap the main app with AuthProvider
+export default function App() {
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
-
-export default App;
