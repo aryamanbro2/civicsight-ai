@@ -1,4 +1,38 @@
 {
-  "name": "CivicSightAI",
-  "displayName": "CivicSightAI"
+  "expo": {
+    "name": "CivicSight.ai",
+    "slug": "civicsight-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow CivicSight.ai to access your camera to capture photos of road issues and infrastructure problems for reporting to local authorities."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow CivicSight.ai to use your location to accurately pinpoint and report infrastructure issues in your area."
+        }
+      ]
+    ]
+  }
 }
