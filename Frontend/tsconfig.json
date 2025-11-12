@@ -3,9 +3,13 @@
   "compilerOptions": {
     "strict": true,
     "baseUrl": ".",
-    "jsx": "react-native",
     "paths": {
       "@/*": ["src/*"]
-    }
+    },
+    // FIX: Allow .js files to be imported into .ts files
+    // This will fix the '../api/axiosConfig' error
+    "allowJs": true
+    // REMOVED: "jsx": "react-native" (already in base)
+    // REMOVED: "moduleResolution": "node16" (this caused all the new errors)
   }
 }

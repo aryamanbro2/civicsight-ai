@@ -1,3 +1,6 @@
+import { KeyboardTypeOptions, ViewStyle, TextStyle } from 'react-native';
+import React from 'react';
+
 // --- User Model ---
 export interface User {
   id: string;
@@ -27,5 +30,31 @@ export interface ReportSubmissionResponse {
     severityScore: number;
     priority: string;
     // Add other fields returned by Node.js backend
-  }
+  };
+}
+
+// --- Component Props (FIX: Added missing definitions) ---
+
+export interface ButtonProps {
+  title: string;
+  onPress: () => void;
+  variant?: 'primary' | 'secondary';
+  disabled?: boolean;
+  loading?: boolean;
+}
+
+export interface SocialAuthButtonProps {
+  provider: string;
+  onPress: () => void;
+  icon: React.ReactNode;
+  text: string;
+}
+
+export interface TextInputProps {
+  placeholder: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  keyboardType?: KeyboardTypeOptions;
+  secureTextEntry?: boolean;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
 }

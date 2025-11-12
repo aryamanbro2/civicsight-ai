@@ -4,7 +4,7 @@ import axios from 'axios';
 // CRITICAL: REPLACE 'YOUR_LAN_IP_ADDRESS' below with the actual IP (e.g., 192.168.1.XX)
 // This IP must be accessible by your phone on the same Wi-Fi network.
 // ------------------------------------------------------------------------------------
-const LAN_IP = 'http://localhost:3000/api'; 
+const LAN_IP = 'https://bookish-space-sniffle-ggrx9pq764vcv9vp-3000.app.github.dev/api'; 
 const DEPLOYED_URL = 'https://your-render-app.onrender.com/api'; // For future deployment
 
 // Determine the base URL based on the environment

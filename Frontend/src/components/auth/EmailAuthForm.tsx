@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Alert, ActivityIndicator } from 'react-native';
-import { Button } from '../common/Button'; // Assuming named export
-import { TextInput } from '../common/TextInput'; // Assuming named export
+import Button from '../common/Button'; // FIX: Use default import
+import TextInput from '../common/TextInput'; // FIX: Use default import
 import { useAuth } from '../../context/AuthContext';
 import { LoginCredentials, RegisterCredentials } from '../types';
 
@@ -9,7 +9,8 @@ interface EmailAuthFormProps {
   isLogin: boolean;
 }
 
-const EmailAuthForm: React.FC<EmailAuthFormProps> = ({ isLogin }) => {
+// FIX: Removed React.FC
+const EmailAuthForm = ({ isLogin }: EmailAuthFormProps) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,11 +26,11 @@ const EmailAuthForm: React.FC<EmailAuthFormProps> = ({ isLogin }) => {
       if (isLogin) {
         const credentials: LoginCredentials = { email, password };
         await signIn(credentials);
-        Alert.alert('Success', 'Logged in successfully!');
+        // Alert.alert('Success', 'Logged in successfully!'); // Success is handled by App.tsx navigating
       } else {
         const credentials: RegisterCredentials = { name, email, password };
         await signUp(credentials);
-        Alert.alert('Success', 'Account created and logged in!');
+        // Alert.alert('Success', 'Account created and logged in!'); // Success is handled by App.tsx navigating
       }
     } catch (error: any) {
       const errorMessage = error.message || 'Authentication failed. Check your credentials.';
@@ -44,6 +45,7 @@ const EmailAuthForm: React.FC<EmailAuthFormProps> = ({ isLogin }) => {
           placeholder="Full Name"
           value={name}
           onChangeText={setName}
+          autoCapitalize="words"
         />
       )}
       <TextInput
@@ -60,12 +62,13 @@ const EmailAuthForm: React.FC<EmailAuthFormProps> = ({ isLogin }) => {
         secureTextEntry
       />
 
+      <View style={{ marginTop: 16 }} />
       <Button
-        title={isAuthenticating ? 'Processing...' : (isLogin ? 'SIGN IN' : 'SIGN UP')}
+        title={isAuthenticating ? 'Processing...' : isLogin ? 'SIGN IN' : 'SIGN UP'}
         onPress={handleSubmit}
         disabled={isAuthenticating}
+        loading={isAuthenticating}
       />
-      {isAuthenticating && <ActivityIndicator size="small" color="#007AFF" style={{ marginTop: 10 }} />}
     </View>
   );
 };
@@ -73,7 +76,6 @@ const EmailAuthForm: React.FC<EmailAuthFormProps> = ({ isLogin }) => {
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    // Styles for form layout
   },
 });
 

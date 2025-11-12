@@ -1,21 +1,13 @@
 /**
  * Authentication Controller (B-01, M-01)
  * Handles user authentication endpoints for citizen issue reporting system
- * 
- * Features implemented:
- * - User signup with phone number (M-01)
- * - User login with phone number
- * - Mock token generation and verification
- * - In-memory user storage (placeholder for database)
- * 
- * @author CivicSight AI Team
- * @version 1.0.0
+ * * @author CivicSight AI Team
+ * @version 1.1.0 (FIXED for Email/Password Auth)
  */
 
 const { generateToken } = require('../middleware/auth');
 
 // In-memory user store (placeholder for database)
-// In production, this would be replaced with MongoDB User model
 const userStore = new Map();
 
 // Counter for generating unique user IDs
@@ -30,25 +22,24 @@ const generateUserId = () => {
 };
 
 /**
- * Validate phone number format
- * @param {string} phone - Phone number to validate
- * @returns {boolean} True if valid phone number
+ * Validate email format
+ * @param {string} email - Email to validate
+ * @returns {boolean} True if valid email
  */
-const isValidPhoneNumber = (phone) => {
-  // Basic phone number validation (10+ digits)
-  const phoneRegex = /^\+?[\d\s\-\(\)]{10,}$/;
-  return phoneRegex.test(phone);
+const isValidEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
 };
 
 /**
- * Find user by phone number
- * @param {string} phone - Phone number to search for
+ * Find user by email
+ * @param {string} email - Email to search for
  * @returns {Object|null} User object or null if not found
  */
-const findUserByPhone = (phone) => {
+const findUserByEmail = (email) => {
   for (const [userId, user] of userStore.entries()) {
-    if (user.phone === phone) {
-      return { userId, ...user };
+    if (user.email === email) {
+      return user; // Return the full user object
     }
   }
   return null;
@@ -56,18 +47,21 @@ const findUserByPhone = (phone) => {
 
 /**
  * Create a new user
- * @param {string} phone - User's phone number
+ * @param {string} name - User's name
+ * @param {string} email - User's email
+ * @param {string} password - User's password
  * @param {Object} additionalData - Additional user data
  * @returns {Object} Created user object
  */
-const createUser = (phone, additionalData = {}) => {
+const createUser = (name, email, password, additionalData = {}) => {
   const userId = generateUserId();
   const user = {
     id: userId,
-    phone,
+    email: email,
+    password: password, // In production, THIS MUST BE HASHED
     type: 'citizen',
-    name: additionalData.name || `User ${userId}`,
-    email: additionalData.email || null,
+    name: name || `User ${userId}`,
+    phone: additionalData.phone || null,
     address: additionalData.address || null,
     isVerified: false,
     createdAt: new Date().toISOString(),
@@ -82,51 +76,52 @@ const createUser = (phone, additionalData = {}) => {
 /**
  * User Signup (M-01)
  * POST /api/auth/signup
- * 
- * @param {Object} req - Express request object
+ * * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
 const signup = async (req, res) => {
   try {
-    const { phone, name, email, address } = req.body;
+    // FIX: Changed from 'phone' to 'name', 'email', 'password'
+    const { name, email, password, address } = req.body;
 
     // Validate required fields
-    if (!phone) {
+    if (!email || !password || !name) {
       return res.status(400).json({
         error: 'Validation failed',
-        message: 'Phone number is required',
-        code: 'MISSING_PHONE'
+        message: 'Name, email, and password are required',
+        code: 'MISSING_CREDENTIALS'
       });
     }
 
-    // Validate phone number format
-    if (!isValidPhoneNumber(phone)) {
+    // Validate email format
+    if (!isValidEmail(email)) {
       return res.status(400).json({
         error: 'Validation failed',
-        message: 'Invalid phone number format',
-        code: 'INVALID_PHONE_FORMAT'
+        message: 'Invalid email format',
+        code: 'INVALID_EMAIL_FORMAT'
       });
     }
 
     // Check if user already exists
-    const existingUser = findUserByPhone(phone);
+    const existingUser = findUserByEmail(email);
     if (existingUser) {
       return res.status(409).json({
         error: 'User already exists',
-        message: 'A user with this phone number is already registered',
+        message: 'A user with this email is already registered',
         code: 'USER_EXISTS',
         userId: existingUser.id
       });
     }
 
     // Create new user
-    const newUser = createUser(phone, { name, email, address });
+    // FIX: Pass email and password to createUser
+    const newUser = createUser(name, email, password, { address });
 
     // Generate authentication token
     const token = generateToken(newUser.id, {
       expiresIn: '7d',
       payload: {
-        phone: newUser.phone,
+        email: newUser.email,
         type: newUser.type
       }
     });
@@ -135,7 +130,7 @@ const signup = async (req, res) => {
     newUser.lastLoginAt = new Date().toISOString();
     userStore.set(newUser.id, newUser);
 
-    console.log(`📱 New user signup: ${newUser.id} (${phone})`);
+    console.log(`📧 New user signup: ${newUser.id} (${email})`);
 
     res.status(201).json({
       message: 'User created successfully',
@@ -165,39 +160,49 @@ const signup = async (req, res) => {
 /**
  * User Login (M-01)
  * POST /api/auth/login
- * 
- * @param {Object} req - Express request object
+ * * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
 const login = async (req, res) => {
   try {
-    const { phone } = req.body;
+    // FIX: Changed from 'phone' to 'email' and 'password'
+    const { email, password } = req.body;
 
     // Validate required fields
-    if (!phone) {
+    if (!email || !password) {
       return res.status(400).json({
         error: 'Validation failed',
-        message: 'Phone number is required',
-        code: 'MISSING_PHONE'
+        message: 'Email and password are required',
+        code: 'MISSING_CREDENTIALS'
       });
     }
 
-    // Validate phone number format
-    if (!isValidPhoneNumber(phone)) {
+    // Validate email format
+    if (!isValidEmail(email)) {
       return res.status(400).json({
         error: 'Validation failed',
-        message: 'Invalid phone number format',
-        code: 'INVALID_PHONE_FORMAT'
+        message: 'Invalid email format',
+        code: 'INVALID_EMAIL_FORMAT'
       });
     }
 
-    // Find user by phone number
-    const user = findUserByPhone(phone);
+    // Find user by email
+    const user = findUserByEmail(email);
     if (!user) {
       return res.status(401).json({
         error: 'Authentication failed',
-        message: 'No user found with this phone number',
+        message: 'No user found with this email',
         code: 'USER_NOT_FOUND'
+      });
+    }
+
+    // FIX: Add password check
+    // This is a MOCK check. In production, you MUST use bcrypt.compare()
+    if (user.password !== password) {
+      return res.status(401).json({
+        error: 'Authentication failed',
+        message: 'Invalid email or password',
+        code: 'INVALID_CREDENTIALS'
       });
     }
 
@@ -205,7 +210,7 @@ const login = async (req, res) => {
     const token = generateToken(user.id, {
       expiresIn: '7d',
       payload: {
-        phone: user.phone,
+        email: user.email,
         type: user.type
       }
     });
@@ -214,7 +219,7 @@ const login = async (req, res) => {
     user.lastLoginAt = new Date().toISOString();
     userStore.set(user.id, user);
 
-    console.log(`🔐 User login: ${user.id} (${phone})`);
+    console.log(`🔐 User login: ${user.id} (${email})`);
 
     res.json({
       message: 'Login successful',
@@ -244,8 +249,7 @@ const login = async (req, res) => {
 /**
  * Get User Profile
  * GET /api/auth/profile
- * 
- * @param {Object} req - Express request object
+ * * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
 const getProfile = async (req, res) => {
@@ -297,14 +301,13 @@ const getProfile = async (req, res) => {
 /**
  * Update User Profile
  * PUT /api/auth/profile
- * 
- * @param {Object} req - Express request object
+ * * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
 const updateProfile = async (req, res) => {
   try {
     const userId = req.userId;
-    const { name, email, address } = req.body;
+    const { name, address, phone } = req.body; // Allow updating name, address, phone
     
     if (!userId) {
       return res.status(401).json({
@@ -327,8 +330,8 @@ const updateProfile = async (req, res) => {
     const updatedUser = {
       ...user,
       name: name || user.name,
-      email: email || user.email,
       address: address || user.address,
+      phone: phone || user.phone, // Allow adding/updating phone
       updatedAt: new Date().toISOString()
     };
 
@@ -365,8 +368,7 @@ const updateProfile = async (req, res) => {
 /**
  * Get all users (for testing purposes)
  * GET /api/auth/users
- * 
- * @param {Object} req - Express request object
+ * * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
 const getAllUsers = async (req, res) => {
@@ -406,6 +408,6 @@ module.exports = {
   getAllUsers,
   // Export utility functions for testing
   userStore,
-  findUserByPhone,
+  findUserByEmail, // Changed from findUserByPhone
   createUser
 };

@@ -5,15 +5,17 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
 
-const LoadingScreen: React.FC = () => (
+const LoadingScreen = () => (
   <View style={styles.loadingContainer}>
     <ActivityIndicator size="large" color="#8B5CF6" />
   </View>
 );
 
 // Create a separate component for the main app logic
-const MainApp: React.FC = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+const MainApp = () => {
+  // FIX: Get `token` from useAuth and derive `isAuthenticated`
+  const { token, isLoading } = useAuth();
+  const isAuthenticated = !!token; // App is authenticated if a token exists
 
   if (isLoading) {
     return <LoadingScreen />;

@@ -1,170 +1,126 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Text, ScrollView, SafeAreaView, TouchableOpacity } from 'react-native';
-import { EmailAuthForm } from '../components/auth/EmailAuthForm'; 
-import { SocialAuthButton } from '../components/auth/SocialAuthButton'; 
-import { Logo } from '../components/common/Logo';
+import {
+  View,
+  StyleSheet,
+  Text,
+  ScrollView,
+  SafeAreaView,
+  TouchableOpacity,
+  Alert,
+} from 'react-native';
+import { FontAwesome } from '@expo/vector-icons'; // Import an icon library
+import { EmailAuthForm } from '../components/auth/EmailAuthForm';
+import SocialAuthButton from '../components/auth/SocialAuthButton'; // FIX: Use default import
+import Logo from '../components/common/Logo'; // FIX: Use default import
 
-const AuthScreen: React.FC = () => {
+const AuthScreen = () => {
   const [isLogin, setIsLogin] = useState(true);
   // Note: The social login functions are handled inside SocialAuthButton component or skipped here
   // const { loginWithGoogle, loginWithApple } = useAuth(); // THIS WAS THE SOURCE OF THE ERRORS
 
-  const toggleMode = () => setIsLogin(prev => !prev);
+  const toggleMode = () => setIsLogin((prev) => !prev);
+
+  // Dummy handler for social buttons
+  const handleSocialLogin = (provider: string) => {
+    Alert.alert('Not Implemented', `${provider} login is not set up yet.`);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        
-        <Logo size={120} />
-        
-        <Text style={styles.title}>
-          {isLogin ? 'Welcome Back!' : 'Join CivicSight AI'}
-        </Text>
-        
+        <View style={styles.header}>
+          <Logo />
+          <Text style={styles.title}>{isLogin ? 'Welcome Back!' : 'Join CivicSight AI'}</Text>
+        </View>
+
         <View style={styles.formContainer}>
-          {/* FIX: Use the corrected component and pass only required props */}
-          <EmailAuthForm isLogin={isLogin} /> 
-          
+          <EmailAuthForm isLogin={isLogin} />
+
           <TouchableOpacity style={styles.toggleButton} onPress={toggleMode}>
             <Text style={styles.toggleButtonText}>
-              {isLogin 
-                ? "Don't have an account? Sign Up" 
-                : "Already have an account? Sign In"}
+              {isLogin ? "Don't have an account? Sign Up" : 'Already have an account? Sign In'}
             </Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.divider} />
-        
-        <SocialAuthButton provider="Google" />
-        <SocialAuthButton provider="Facebook" />
+        <View style={styles.dividerContainer}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>OR</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* FIX: Added missing props to SocialAuthButton */}
+        <SocialAuthButton
+          provider="Google"
+          text="Continue with Google"
+          icon={<FontAwesome name="google" size={20} color="#000" />}
+          onPress={() => handleSocialLogin('Google')}
+        />
+        <SocialAuthButton
+          provider="Facebook"
+          text="Continue with Facebook"
+          icon={<FontAwesome name="facebook" size={20} color="#000" />}
+          onPress={() => handleSocialLogin('Facebook')}
+        />
       </ScrollView>
     </SafeAreaView>
   );
 };
 
-// ... (Styles from AuthScreen.tsx remain the same) ...
+// ... (Your existing styles for AuthScreen.tsx) ...
+// NOTE: I've added a few styles from your description that were missing
+// in the provided file to make it render correctly.
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#FFFFFF',
-    },
-    scrollContent: {
-        flexGrow: 1,
-        paddingHorizontal: 24,
-        paddingTop: 60,
-        paddingBottom: 40,
-    },
-    header: {
-        alignItems: 'center',
-        marginBottom: 40,
-    },
-    title: {
-        fontSize: 32,
-        fontWeight: '700',
-        color: '#1F2937',
-        marginBottom: 12,
-    },
-    subtitle: {
-        fontSize: 16,
-        color: '#6B7280',
-        textAlign: 'center',
-        lineHeight: 24,
-    },
-    form: {
-        flex: 1,
-    },
-    inputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F9FAFB',
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-    },
-    inputIcon: {
-        marginRight: 12,
-    },
-    input: {
-        flex: 1,
-        fontSize: 16,
-        color: '#1F2937',
-    },
-    passwordToggle: {
-        padding: 4,
-    },
-    submitButton: {
-        backgroundColor: '#8B5CF6',
-        paddingVertical: 16,
-        borderRadius: 12,
-        alignItems: 'center',
-        marginTop: 8,
-        marginBottom: 24,
-    },
-    submitButtonDisabled: {
-        backgroundColor: '#D1D5DB',
-    },
-    submitButtonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    divider: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    dividerLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: '#E5E7EB',
-    },
-    dividerText: {
-        marginHorizontal: 16,
-        fontSize: 14,
-        color: '#6B7280',
-    },
-    socialButtons: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 32,
-    },
-    socialButton: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#F9FAFB',
-        paddingVertical: 12,
-        borderRadius: 12,
-        marginHorizontal: 6,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-    },
-    socialButtonText: {
-        marginLeft: 8,
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#374151',
-    },
-    toggleContainer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    toggleText: {
-        fontSize: 14,
-        color: '#6B7280',
-    },
-    toggleLink: {
-        fontSize: 14,
-        color: '#8B5CF6',
-        fontWeight: '600',
-    },
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  container: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 40,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginTop: 24,
+    textAlign: 'center',
+  },
+  formContainer: {
+    marginBottom: 24,
+  },
+  toggleButton: {
+    marginTop: 16,
+  },
+  toggleButtonText: {
+    fontSize: 14,
+    color: '#8B5CF6',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  // ... (Your other styles like socialButton, input etc. would go here)
 });
 
 export default AuthScreen;
