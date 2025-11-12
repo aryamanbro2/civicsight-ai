@@ -1,0 +1,21 @@
+
+fastapi~=0.111.0 # Or the latest stable version
+pydantic~=2.7.4 # Or the latest stable version
+uvicorn~=0.30.1
+
+requests==2.28.1  # Core Python web framework for the API
+
+# --- IMAGE PROCESSING (YOLOv8) ---
+# START with a recent, stable version and adjust only if loading the model fails.
+ultralytics~=8.2.0 
+
+# Base image processing library
+Pillow==9.2.0
+opencv-python-headless # Necessary for CV tasks without requiring a display environment
+
+# --- SPEECH-TO-TEXT & NLP (Whisper) ---
+openai-whisper==20231117 
+
+# The core scientific computing dependencies 
+torch
+torchaudio

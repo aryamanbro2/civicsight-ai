@@ -32,7 +32,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow CivicSight.ai to use your location to accurately pinpoint and report infrastructure issues in your area."
         }
-      ]
+      ],
+      "expo-secure-store"
     ]
   }
 }

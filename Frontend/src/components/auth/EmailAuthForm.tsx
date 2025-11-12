@@ -1,194 +1,81 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { Button } from '../common/Button'; // Assuming named export
+import { TextInput } from '../common/TextInput'; // Assuming named export
+import { useAuth } from '../../context/AuthContext';
+import { LoginCredentials, RegisterCredentials } from '../types';
 
 interface EmailAuthFormProps {
-    onEmailSubmit: (email: string) => void;
-    onGoogleAuth: () => void;
-    onAppleAuth: () => void;
-    isLoading?: boolean;
+  isLogin: boolean;
 }
 
-const EmailAuthForm: React.FC<EmailAuthFormProps> = ({
-    onEmailSubmit,
-    onGoogleAuth,
-    onAppleAuth,
-    isLoading = false,
-}) => {
-    const [email, setEmail] = useState('');
+const EmailAuthForm: React.FC<EmailAuthFormProps> = ({ isLogin }) => {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const { signIn, signUp, isAuthenticating } = useAuth(); // Use correct function names from context
 
-    const handleContinue = () => {
-        if (email.trim() && !isLoading) {
-            onEmailSubmit(email);
-        }
-    };
+  const handleSubmit = async () => {
+    if (!email || !password || (!isLogin && !name)) {
+      Alert.alert('Missing Fields', 'Please fill in all required fields.');
+      return;
+    }
 
-    const isDisabled = !email.trim() || isLoading;
+    try {
+      if (isLogin) {
+        const credentials: LoginCredentials = { email, password };
+        await signIn(credentials);
+        Alert.alert('Success', 'Logged in successfully!');
+      } else {
+        const credentials: RegisterCredentials = { name, email, password };
+        await signUp(credentials);
+        Alert.alert('Success', 'Account created and logged in!');
+      }
+    } catch (error: any) {
+      const errorMessage = error.message || 'Authentication failed. Check your credentials.';
+      Alert.alert('Error', errorMessage);
+    }
+  };
 
-    return (
-        <View style={styles.container}>
-            {/* Logo */}
-            <Text style={styles.logo}>CivicSight.ai</Text>
+  return (
+    <View style={styles.container}>
+      {!isLogin && (
+        <TextInput
+          placeholder="Full Name"
+          value={name}
+          onChangeText={setName}
+        />
+      )}
+      <TextInput
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+      />
+      <TextInput
+        placeholder="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+      />
 
-            {/* Header */}
-            <View style={styles.headerContainer}>
-                <Text style={styles.title}>Create an account</Text>
-                <Text style={styles.subtitle}>Enter your phone number to sign up for this app</Text>
-            </View>
-
-            {/* Phone Input */}
-            <TextInput
-                style={[styles.emailInput, isLoading && styles.inputDisabled]}
-                placeholder="+1234567890"
-                placeholderTextColor="#999"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="phone-pad"
-                autoCapitalize="none"
-                editable={!isLoading}
-            />
-
-            {/* Continue Button */}
-            <TouchableOpacity
-                style={[styles.continueButton, isDisabled && styles.disabledButton]}
-                onPress={handleContinue}
-                disabled={isDisabled}
-            >
-                {isLoading ? (
-                    <ActivityIndicator color="#ffffff" size="small" />
-                ) : (
-                    <Text style={styles.continueButtonText}>Continue</Text>
-                )}
-            </TouchableOpacity>
-
-            {/* Divider */}
-            <Text style={styles.divider}>or</Text>
-
-            {/* Social Auth Buttons */}
-            <TouchableOpacity
-                style={[styles.socialButton, isLoading && styles.socialButtonDisabled]}
-                onPress={onGoogleAuth}
-                disabled={isLoading}
-            >
-                <Text style={styles.socialButtonText}>🇬 Continue with Google</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-                style={[styles.socialButton, isLoading && styles.socialButtonDisabled]}
-                onPress={onAppleAuth}
-                disabled={isLoading}
-            >
-                <Text style={styles.socialButtonText}>🍎 Continue with Apple</Text>
-            </TouchableOpacity>
-
-            {/* Terms and Privacy */}
-            <Text style={styles.termsText}>
-                By clicking continue, you agree to our{' '}
-                <Text style={styles.linkText}>Terms of Service</Text>
-                {' '}and{' '}
-                <Text style={styles.linkText}>Privacy Policy</Text>
-            </Text>
-        </View>
-    );
+      <Button
+        title={isAuthenticating ? 'Processing...' : (isLogin ? 'SIGN IN' : 'SIGN UP')}
+        onPress={handleSubmit}
+        disabled={isAuthenticating}
+      />
+      {isAuthenticating && <ActivityIndicator size="small" color="#007AFF" style={{ marginTop: 10 }} />}
+    </View>
+  );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#ffffff',
-        paddingHorizontal: 24,
-        paddingTop: 120,
-        alignItems: 'center',
-    },
-    logo: {
-        fontSize: 36,
-        fontWeight: '400',
-        color: '#000000',
-        marginBottom: 80,
-        fontFamily: 'System',
-    },
-    headerContainer: {
-        alignItems: 'center',
-        marginBottom: 32,
-    },
-    title: {
-        fontSize: 24,
-        fontWeight: '600',
-        color: '#000000',
-        marginBottom: 8,
-    },
-    subtitle: {
-        fontSize: 16,
-        color: '#666666',
-        textAlign: 'center',
-    },
-    emailInput: {
-        width: '100%',
-        height: 56,
-        borderWidth: 1,
-        borderColor: '#e0e0e0',
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        fontSize: 16,
-        backgroundColor: '#ffffff',
-        marginBottom: 24,
-    },
-    inputDisabled: {
-        backgroundColor: '#f8f8f8',
-        color: '#999999',
-    },
-    continueButton: {
-        width: '100%',
-        height: 56,
-        backgroundColor: '#000000',
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 32,
-    },
-    disabledButton: {
-        backgroundColor: '#cccccc',
-    },
-    continueButtonText: {
-        color: '#ffffff',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    divider: {
-        fontSize: 16,
-        color: '#999999',
-        marginBottom: 32,
-    },
-    socialButton: {
-        width: '100%',
-        height: 56,
-        backgroundColor: '#f5f5f5',
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16,
-        flexDirection: 'row',
-    },
-    socialButtonDisabled: {
-        backgroundColor: '#f0f0f0',
-        opacity: 0.6,
-    },
-    socialButtonText: {
-        fontSize: 16,
-        color: '#000000',
-        fontWeight: '500',
-    },
-    termsText: {
-        fontSize: 14,
-        color: '#999999',
-        textAlign: 'center',
-        marginTop: 32,
-        lineHeight: 20,
-        paddingHorizontal: 20,
-    },
-    linkText: {
-        color: '#000000',
-        fontWeight: '500',
-    },
+  container: {
+    width: '100%',
+    // Styles for form layout
+  },
 });
 
-export default EmailAuthForm;
+// Assuming this is exported as a named export
+export { EmailAuthForm };

@@ -1,263 +1,49 @@
 import React, { useState } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    TextInput,
-    TouchableOpacity,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    ActivityIndicator,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../context/AuthContext';
+import { View, StyleSheet, Text, ScrollView, SafeAreaView, TouchableOpacity } from 'react-native';
+import { EmailAuthForm } from '../components/auth/EmailAuthForm'; 
+import { SocialAuthButton } from '../components/auth/SocialAuthButton'; 
+import { Logo } from '../components/common/Logo';
 
 const AuthScreen: React.FC = () => {
-    const [isLoginMode, setIsLoginMode] = useState(true); // Toggle between login and signup
-    const [email, setEmail] = useState('');
-    const [name, setName] = useState('');
-    const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
+  const [isLogin, setIsLogin] = useState(true);
+  // Note: The social login functions are handled inside SocialAuthButton component or skipped here
+  // const { loginWithGoogle, loginWithApple } = useAuth(); // THIS WAS THE SOURCE OF THE ERRORS
 
-    const { loginWithEmail, signupWithEmail, loginWithGoogle, loginWithApple } = useAuth();
+  const toggleMode = () => setIsLogin(prev => !prev);
 
-    const handleSubmit = async () => {
-        if (!email.trim()) {
-            Alert.alert('Error', 'Please enter your email');
-            return;
-        }
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        
+        <Logo size={120} />
+        
+        <Text style={styles.title}>
+          {isLogin ? 'Welcome Back!' : 'Join CivicSight AI'}
+        </Text>
+        
+        <View style={styles.formContainer}>
+          {/* FIX: Use the corrected component and pass only required props */}
+          <EmailAuthForm isLogin={isLogin} /> 
+          
+          <TouchableOpacity style={styles.toggleButton} onPress={toggleMode}>
+            <Text style={styles.toggleButtonText}>
+              {isLogin 
+                ? "Don't have an account? Sign Up" 
+                : "Already have an account? Sign In"}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-        if (!isLoginMode) {
-            if (!name.trim()) {
-                Alert.alert('Error', 'Please enter your name');
-                return;
-            }
-            if (password !== confirmPassword) {
-                Alert.alert('Error', 'Passwords do not match');
-                return;
-            }
-        }
-
-        setIsLoading(true);
-        try {
-            let response;
-            if (isLoginMode) {
-                response = await loginWithEmail(email.trim());
-            } else {
-                response = await signupWithEmail(email.trim());
-            }
-
-            if (response.success) {
-                Alert.alert('Success', isLoginMode ? 'Logged in successfully!' : 'Account created successfully!');
-            } else {
-                Alert.alert('Error', response.message || `${isLoginMode ? 'Login' : 'Signup'} failed`);
-            }
-        } catch (error) {
-            console.error(`${isLoginMode ? 'Login' : 'Signup'} error:`, error);
-            Alert.alert('Error', `Something went wrong. Please try again.`);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleGoogleLogin = async () => {
-        setIsLoading(true);
-        try {
-            const response = await loginWithGoogle();
-            if (response.success) {
-                Alert.alert('Success', 'Logged in with Google successfully!');
-            } else {
-                Alert.alert('Error', response.message || 'Google login failed');
-            }
-        } catch (error) {
-            console.error('Google login error:', error);
-            Alert.alert('Error', 'Google login failed. Please try again.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleAppleLogin = async () => {
-        setIsLoading(true);
-        try {
-            const response = await loginWithApple();
-            if (response.success) {
-                Alert.alert('Success', 'Logged in with Apple successfully!');
-            } else {
-                Alert.alert('Error', response.message || 'Apple login failed');
-            }
-        } catch (error) {
-            console.error('Apple login error:', error);
-            Alert.alert('Error', 'Apple login failed. Please try again.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const toggleMode = () => {
-        setIsLoginMode(!isLoginMode);
-        setEmail('');
-        setName('');
-        setPassword('');
-        setConfirmPassword('');
-    };
-
-    return (
-        <KeyboardAvoidingView
-            style={styles.container}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-            >
-                {/* Header */}
-                <View style={styles.header}>
-                    <Text style={styles.title}>CivicSight.ai</Text>
-                    <Text style={styles.subtitle}>
-                        {isLoginMode
-                            ? 'Welcome back! Sign in to continue reporting road issues.'
-                            : 'Join CivicSight.ai to start reporting road issues in your community.'
-                        }
-                    </Text>
-                </View>
-
-                {/* Form */}
-                <View style={styles.form}>
-                    {/* Name Input (only for signup) */}
-                    {!isLoginMode && (
-                        <View style={styles.inputContainer}>
-                            <Ionicons name="person-outline" size={20} color="#6B7280" style={styles.inputIcon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Full Name"
-                                value={name}
-                                onChangeText={setName}
-                                autoCapitalize="words"
-                                autoComplete="name"
-                            />
-                        </View>
-                    )}
-
-                    {/* Email Input */}
-                    <View style={styles.inputContainer}>
-                        <Ionicons name="mail-outline" size={20} color="#6B7280" style={styles.inputIcon} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Email Address"
-                            value={email}
-                            onChangeText={setEmail}
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                            autoComplete="email"
-                        />
-                    </View>
-
-                    {/* Password Input (if you want to add password functionality) */}
-                    {/* Uncomment this section if your backend supports password authentication
-                    <View style={styles.inputContainer}>
-                        <Ionicons name="lock-closed-outline" size={20} color="#6B7280" style={styles.inputIcon} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Password"
-                            value={password}
-                            onChangeText={setPassword}
-                            secureTextEntry={!showPassword}
-                            autoComplete={isLoginMode ? "current-password" : "new-password"}
-                        />
-                        <TouchableOpacity 
-                            onPress={() => setShowPassword(!showPassword)}
-                            style={styles.passwordToggle}
-                        >
-                            <Ionicons 
-                                name={showPassword ? "eye-outline" : "eye-off-outline"} 
-                                size={20} 
-                                color="#6B7280" 
-                            />
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* Confirm Password (only for signup) */}
-                    {/*
-                    {!isLoginMode && (
-                        <View style={styles.inputContainer}>
-                            <Ionicons name="lock-closed-outline" size={20} color="#6B7280" style={styles.inputIcon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Confirm Password"
-                                value={confirmPassword}
-                                onChangeText={setConfirmPassword}
-                                secureTextEntry={!showPassword}
-                                autoComplete="new-password"
-                            />
-                        </View>
-                    )}
-                    */}
-
-                    {/* Submit Button */}
-                    <TouchableOpacity
-                        style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
-                        onPress={handleSubmit}
-                        disabled={isLoading}
-                    >
-                        {isLoading ? (
-                            <ActivityIndicator color="white" />
-                        ) : (
-                            <Text style={styles.submitButtonText}>
-                                {isLoginMode ? 'Sign In' : 'Create Account'}
-                            </Text>
-                        )}
-                    </TouchableOpacity>
-
-                    {/* Divider */}
-                    <View style={styles.divider}>
-                        <View style={styles.dividerLine} />
-                        <Text style={styles.dividerText}>or continue with</Text>
-                        <View style={styles.dividerLine} />
-                    </View>
-
-                    {/* Social Login Buttons */}
-                    <View style={styles.socialButtons}>
-                        <TouchableOpacity
-                            style={styles.socialButton}
-                            onPress={handleGoogleLogin}
-                            disabled={isLoading}
-                        >
-                            <Ionicons name="logo-google" size={20} color="#DB4437" />
-                            <Text style={styles.socialButtonText}>Google</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.socialButton}
-                            onPress={handleAppleLogin}
-                            disabled={isLoading}
-                        >
-                            <Ionicons name="logo-apple" size={20} color="#000" />
-                            <Text style={styles.socialButtonText}>Apple</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* Toggle between Login/Signup */}
-                    <View style={styles.toggleContainer}>
-                        <Text style={styles.toggleText}>
-                            {isLoginMode ? "Don't have an account? " : "Already have an account? "}
-                        </Text>
-                        <TouchableOpacity onPress={toggleMode}>
-                            <Text style={styles.toggleLink}>
-                                {isLoginMode ? 'Sign Up' : 'Sign In'}
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </ScrollView>
-        </KeyboardAvoidingView>
-    );
+        <View style={styles.divider} />
+        
+        <SocialAuthButton provider="Google" />
+        <SocialAuthButton provider="Facebook" />
+      </ScrollView>
+    </SafeAreaView>
+  );
 };
+
+// ... (Styles from AuthScreen.tsx remain the same) ...
 
 const styles = StyleSheet.create({
     container: {

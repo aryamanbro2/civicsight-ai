@@ -1,260 +1,339 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    Alert,
-    Dimensions,
-    StatusBar,
-} from 'react-native';
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+// FIX: Use standard named imports for React hooks
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, ActivityIndicator } from 'react-native';
+// FIX: Using NativeStackScreenProps and explicitly installing the package resolves TypeScript finding the module.
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Camera, CameraType } from 'expo-camera';
+import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
-import { Ionicons } from '@expo/vector-icons';
+import { FontAwesome5, MaterialIcons } from '@expo/vector-icons';
+
+
+// --- Type Definitions (Ensure these match your router setup) ---
+type ReportFormScreenParams = { mediaUri: string; mediaType: 'image' | 'audio' };
+
+type RootStackParamList = {
+  Camera: undefined;
+  ReportForm: ReportFormScreenParams;
+  Dashboard: undefined;
+  Auth: undefined;
+};
+type Props = NativeStackScreenProps<RootStackParamList, 'Camera'>;
 
 const { width } = Dimensions.get('window');
+const CAMERA_SIZE = width * 0.9;
+const PRIMARY_COLOR = '#007AFF';
+const DANGER_COLOR = '#FF3B30';
 
-interface CameraScreenProps {
-    onCapture: (imageUri: string, location: any) => void;
-    onClose: () => void;
-}
+// FIX: Use standard function component syntax and explicitly type the props.
+const CameraScreen: React.FC<Props> = ({ navigation }) => {
+  // --- State Variables ---
+  const cameraRef = useRef<Camera | null>(null);
+  const audioRecorder = useRef<Audio.Recording | null>(null);
 
-const CameraScreen: React.FC<CameraScreenProps> = ({ onCapture, onClose }) => {
-    const [permission, requestPermission] = useCameraPermissions();
-    const [facing, setFacing] = useState<CameraType>('back');
-    const [isRecording, setIsRecording] = useState(false);
-    const [location, setLocation] = useState<any>(null);
-    const cameraRef = useRef<CameraView>(null);
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [isCapturing, setIsCapturing] = useState<boolean>(false);
+  // CameraType is now correctly referenced as a value imported from 'expo-camera'
+  const [type, setType] = useState<CameraType>(CameraType.back); 
+  const [mode, setMode] = useState<'photo' | 'audio'>('photo'); 
+  const [location, setLocation] = useState<Location.LocationObject | null>(null);
 
-    useEffect(() => {
-        if (!permission) {
-            requestPermission();
-        }
-        getLocationPermissions();
-    }, []);
+  // --- Permission Handlers ---
+  useEffect(() => {
+    const requestPermissions = async () => {
+      const { status: cameraStatus } = await Camera.requestCameraPermissionsAsync();
+      const { status: micStatus } = await Audio.requestPermissionsAsync();
+      const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
 
-    const getLocationPermissions = async () => {
-        try {
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert('Permission denied', 'Location permission is required for reporting issues');
-                return;
-            }
+      const allGranted = cameraStatus === 'granted' && micStatus === 'granted' && locationStatus === 'granted';
 
-            const currentLocation = await Location.getCurrentPositionAsync({});
-            const address = await Location.reverseGeocodeAsync({
-                latitude: currentLocation.coords.latitude,
-                longitude: currentLocation.coords.longitude,
-            });
+      if (!allGranted) {
+        Alert.alert('Permissions Required', 'Camera, microphone, and location permissions are essential for submitting a report.');
+        setHasPermission(false);
+        return;
+      }
+      setHasPermission(true);
 
-            setLocation({
-                coords: currentLocation.coords,
-                address: address[0],
-            });
-        } catch (error) {
-            console.error('Error getting location:', error);
-        }
+      const currentLocation = await Location.getCurrentPositionAsync({});
+      setLocation(currentLocation);
     };
 
-    const takePicture = async () => {
-        if (cameraRef.current) {
-            try {
-                setIsRecording(true);
-                const photo = await cameraRef.current.takePictureAsync({
-                    quality: 0.8,
-                    base64: false,
-                });
+    requestPermissions();
+  }, []);
 
-                if (photo) {
-                    setTimeout(() => setIsRecording(false), 200);
-                    onCapture(photo.uri, location);
-                }
-            } catch (error) {
-                setIsRecording(false);
-                Alert.alert('Error', 'Failed to take picture');
-            }
+  // --- Photo Capture Logic ---
+  const takePicture = async () => {
+    if (cameraRef.current) {
+      setIsCapturing(true);
+      try {
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.5,
+          exif: true,
+          base64: false,
+        });
+
+        if (photo.uri) {
+          navigation.navigate('ReportForm', { mediaUri: photo.uri, mediaType: 'image' });
         }
-    };
-
-    const toggleCameraFacing = () => {
-        setFacing(current => (current === 'back' ? 'front' : 'back'));
-    };
-
-    if (!permission) {
-        return <View style={styles.container} />;
+      } catch (error) {
+        console.error("Photo capture failed:", error);
+        Alert.alert("Error", "Failed to capture photo.");
+      } finally {
+        setIsCapturing(false);
+      }
     }
+  };
 
-    if (!permission.granted) {
-        return (
-            <View style={styles.container}>
-                <View style={styles.permissionContainer}>
-                    <Text style={styles.permissionText}>We need your permission to show the camera</Text>
-                    <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-                        <Text style={styles.permissionButtonText}>Grant Permission</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
-        );
+  // --- Audio Recording Logic ---
+  const startRecording = async () => {
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        // FIX: Using correct, current constants for Interruption Mode (Audio.InterruptionModeIOS)
+        interruptionModeIOS: Audio.InterruptionModeIOS.DoNotMix,
+        interruptionModeAndroid: Audio.InterruptionModeAndroid.DoNotMix,
+      });
+
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.startAsync();
+      audioRecorder.current = recording;
+      setIsRecording(true);
+    } catch (error) {
+      console.error("Audio recording failed:", error);
+      Alert.alert("Error", "Failed to start audio recording.");
     }
+  };
 
+  const stopRecording = async () => {
+    if (audioRecorder.current) {
+      try {
+        await audioRecorder.current.stopAndUnloadAsync();
+        const uri = audioRecorder.current.getURI();
+
+        if (uri) {
+          navigation.navigate('ReportForm', { mediaUri: uri, mediaType: 'audio' });
+        }
+      } catch (error) {
+        console.error("Audio stop failed:", error);
+        Alert.alert("Error", "Failed to stop recording.");
+      } finally {
+        audioRecorder.current = null;
+        setIsRecording(false);
+      }
+    }
+  };
+
+  // --- Render Logic ---
+  if (hasPermission === null || hasPermission === false) {
     return (
-        <View style={styles.container}>
-            <StatusBar barStyle="light-content" />
-
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={onClose} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color="white" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Report an Issue</Text>
-                <View style={styles.placeholder} />
-            </View>
-
-            {/* Camera View */}
-            <CameraView style={styles.camera} facing={facing} ref={cameraRef}>
-                <View style={styles.overlay}>
-                    {/* Capture Frame */}
-                    <View style={styles.captureFrame} />
-                </View>
-            </CameraView>
-
-            {/* Bottom Controls */}
-            <View style={styles.bottomControls}>
-                <TouchableOpacity style={styles.controlButton}>
-                    <Ionicons name="flash" size={24} color="white" />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={[styles.captureButton, isRecording && styles.captureButtonActive]}
-                    onPress={takePicture}
-                    disabled={isRecording}
-                >
-                    <View style={styles.captureButtonInner} />
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.controlButton} onPress={toggleCameraFacing}>
-                    <Ionicons name="camera-reverse" size={24} color="white" />
-                </TouchableOpacity>
-            </View>
-        </View>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={PRIMARY_COLOR} />
+        <Text style={styles.loadingText}>
+          {hasPermission === false ? 'Permissions Denied. Check App Settings.' : 'Requesting permissions...'}
+        </Text>
+      </View>
     );
+  }
+  
+  const toggleMode = () => {
+    if (isRecording || isCapturing) return; 
+    setMode(mode === 'photo' ? 'audio' : 'photo');
+  };
+
+  const captureAction = mode === 'photo' ? takePicture : (isRecording ? stopRecording : startRecording);
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.headerTitle}>
+        Report Civic Issue ({mode === 'photo' ? 'Image' : 'Voice'})
+      </Text>
+      
+      {/* 1. Camera View / Audio Placeholder */}
+      <View style={styles.cameraWrapper}>
+        {mode === 'photo' && (
+          <Camera
+            ref={cameraRef}
+            style={styles.camera}
+            type={type}
+            ratio="16:9" 
+          >
+            {isCapturing && (
+              <View style={styles.overlay}>
+                <ActivityIndicator size="large" color="#fff" />
+                <Text style={styles.overlayText}>Processing Photo...</Text>
+              </View>
+            )}
+          </Camera>
+        )}
+        
+        {mode === 'audio' && (
+          <View style={[styles.camera, styles.audioMode]}>
+            <MaterialIcons 
+                name={isRecording ? "keyboard-voice" : "mic-none"} 
+                size={120} 
+                color={isRecording ? DANGER_COLOR : "#ddd"} 
+            />
+            <Text style={styles.audioModeText}>
+              {isRecording ? 'RECORDING... (Tap STOP below)' : 'Tap the button below to start voice report.'}
+            </Text>
+          </View>
+        )}
+      </View>
+      
+      {/* 2. Controls */}
+      <View style={styles.controlsContainer}>
+        
+        {/* Toggle Mode Button */}
+        <TouchableOpacity style={styles.modeToggle} onPress={toggleMode} disabled={isRecording || isCapturing}>
+          <FontAwesome5 
+            name={mode === 'photo' ? "microphone-alt" : "camera"} 
+            size={24} 
+            color={isRecording || isCapturing ? "#ccc" : PRIMARY_COLOR}
+          />
+          <Text style={{color: isRecording || isCapturing ? "#ccc" : PRIMARY_COLOR, fontSize: 12}}>
+            {mode === 'photo' ? 'Switch to Voice' : 'Switch to Camera'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Capture/Record Button */}
+        <TouchableOpacity
+          style={[
+            styles.captureButton, 
+            isCapturing && { backgroundColor: '#ccc' },
+            isRecording && { backgroundColor: DANGER_COLOR }
+          ]}
+          onPress={captureAction}
+          disabled={isCapturing || (mode === 'photo' && isRecording)}
+        >
+          {isCapturing ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <FontAwesome5 
+              name={mode === 'photo' ? "camera" : (isRecording ? "stop" : "microphone")} 
+              size={30} 
+              color={mode === 'photo' ? "#fff" : (isRecording ? "#fff" : PRIMARY_COLOR)}
+            />
+          )}
+        </TouchableOpacity>
+        
+        {/* Location Status */}
+        <View style={styles.locationStatus}>
+          <MaterialIcons 
+            name="location-on" 
+            size={20} 
+            color={location ? '#28A745' : DANGER_COLOR} 
+          />
+          <Text style={styles.locationText}>
+            {location ? 'Location Ready' : 'Fetching Location...'}
+          </Text>
+        </View>
+
+      </View>
+      
+      {/* Footer */}
+      <Text style={styles.footerText}>
+        AI-powered classification and priority scoring ensures faster action.
+      </Text>
+    </View>
+  );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: 'black',
-    },
-    permissionContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-    },
-    permissionText: {
-        fontSize: 18,
-        color: 'white',
-        textAlign: 'center',
-        marginBottom: 20,
-    },
-    permissionButton: {
-        backgroundColor: '#8B5CF6',
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 8,
-    },
-    permissionButtonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingTop: 50,
-        paddingHorizontal: 20,
-        paddingBottom: 20,
-        backgroundColor: 'rgba(0,0,0,0.3)',
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 1,
-    },
-    backButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    headerTitle: {
-        color: 'white',
-        fontSize: 18,
-        fontWeight: '600',
-    },
-    placeholder: {
-        width: 40,
-    },
-    camera: {
-        flex: 1,
-    },
-    overlay: {
-        flex: 1,
-        backgroundColor: 'transparent',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    captureFrame: {
-        width: width - 60,
-        height: width - 60,
-        borderWidth: 2,
-        borderColor: 'white',
-        borderRadius: 20,
-        backgroundColor: 'transparent',
-    },
-    bottomControls: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 40,
-        paddingBottom: 40,
-        paddingTop: 20,
-        backgroundColor: 'rgba(0,0,0,0.8)',
-    },
-    controlButton: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    captureButton: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        backgroundColor: 'white',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    captureButtonActive: {
-        backgroundColor: '#8B5CF6',
-    },
-    captureButtonInner: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: '#8B5CF6',
-    },
-    text: {
-        fontSize: 18,
-        color: 'white',
-        textAlign: 'center',
-        marginTop: 100,
-    },
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+    padding: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    color: PRIMARY_COLOR,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center',
+    color: '#333',
+  },
+  cameraWrapper: {
+    width: '100%',
+    height: CAMERA_SIZE,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    marginBottom: 20,
+  },
+  camera: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  audioMode: {
+    backgroundColor: '#f9f9f9',
+    justifyContent: 'center',
+  },
+  audioModeText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 20,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  overlayText: {
+    color: '#fff',
+    marginTop: 10,
+  },
+  controlsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    marginBottom: 20,
+  },
+  captureButton: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: PRIMARY_COLOR,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  modeToggle: {
+    alignItems: 'center',
+    padding: 5,
+  },
+  locationStatus: {
+    flexDirection: 'column',
+    alignItems: 'center',
+  },
+  locationText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+  },
+  footerText: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'center',
+    marginTop: 'auto',
+  },
 });
 
 export default CameraScreen;

@@ -1,18 +1,19 @@
 /**
  * CivicSight AI Backend Server
  * Express.js server with MongoDB connection for citizen issue reporting system
- * 
- * Features implemented:
+ * * Features implemented:
  * - Modular route structure
  * - MongoDB connection using Mongoose
  * - CORS configuration
  * - Body parsing middleware
  * - JWT token support
  * - Production-ready error handling
- * 
- * @author CivicSight AI Team
- * @version 1.0.0
+ * * @author CivicSight AI Team
+ * @version 1.1.0 (Updated for .env integration and CORS fix)
  */
+
+// 1. CRITICAL: Load environment variables from .env file immediately
+require('dotenv').config();
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -25,16 +26,18 @@ const apiRoutes = require('./src/routes');
 // Initialize Express app
 const app = express();
 
-// Environment variables (with defaults for development)
+// Environment variables (The process.env.MONGODB_URI is now guaranteed to be loaded)
 const PORT = process.env.PORT || 3000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/civicsight-ai';
+// Using the .env variable, falling back to localhost for pure local dev if .env is missing
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/civicsight_dev';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Middleware configuration
 app.use(cors({
+  // 2. FIX: Use wildcard (*) for development to allow Expo/Tunnel connections
   origin: NODE_ENV === 'production' 
     ? process.env.ALLOWED_ORIGINS?.split(',') || ['https://civicsight.ai']
-    : ['http://localhost:3000', 'http://localhost:19006', 'http://localhost:3001'],
+    : '*', 
   credentials: true
 }));
 
@@ -52,6 +55,7 @@ if (NODE_ENV === 'development') {
 // MongoDB connection
 const connectDB = async () => {
   try {
+    // Mongoose will use the URI from the .env file (MONGODB_URI)
     await mongoose.connect(MONGODB_URI);
     console.log('✅ Connected to MongoDB successfully');
     console.log(`📊 Database: ${MONGODB_URI}`);
@@ -78,7 +82,7 @@ mongoose.connection.on('disconnected', () => {
 app.get('/', (req, res) => {
   res.json({
     message: 'CivicSight AI Backend API',
-    version: '1.0.0',
+    version: '1.1.0',
     status: 'running',
     environment: NODE_ENV,
     timestamp: new Date().toISOString(),
@@ -124,6 +128,8 @@ app.get('/api/health', (req, res) => {
 
 // Test route for Report model (development only)
 if (NODE_ENV === 'development') {
+  // NOTE: You must install the 'dotenv' package: npm install dotenv
+  // If you see a failure here, ensure you have run that command.
   const { Report } = require('./src/models');
   
   app.get('/api/test-report', async (req, res) => {
