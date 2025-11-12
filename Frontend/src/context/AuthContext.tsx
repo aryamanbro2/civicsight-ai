@@ -1,103 +1,98 @@
-// FIX: Use named imports directly, which is the most common pattern.
-// We must also fix the FC usage which conflicts with the TS environment.
-import React, { createContext, useState, useEffect, useMemo, useContext } from 'react';
-import * as SecureStore from 'expo-secure-store';
+import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
+import * as authService from '../services/authService';
 import { User, LoginCredentials, RegisterCredentials } from '../components/types';
-import { login, register, logout, getStoredAuthData } from '../services/authService';
 
-// --- 1. Types ---
 interface AuthContextType {
   user: User | null;
   token: string | null;
-  isLoading: boolean;
   isAuthenticating: boolean;
-  // These are the functions defined in the context:
-  signIn: (credentials: LoginCredentials) => Promise<void>; 
+  isLoading: boolean;
+  signIn: (credentials: LoginCredentials) => Promise<void>;
   signUp: (credentials: RegisterCredentials) => Promise<void>;
-  // Social Logins will be handled by a single function if implemented later:
-  // socialSignIn: (provider: 'google' | 'facebook') => Promise<void>; 
-  signOut: () => Promise<void>;
+  signOut: () => void;
 }
 
-// Initial context values
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// --- 2. Provider Component ---
 interface AuthProviderProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
-// FIX: Change React.FC to a standard function signature to fix the 'has no exported member FC' error.
-export const AuthProvider = ({ children }: AuthProviderProps) => { 
+export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Load token from storage on app launch
   useEffect(() => {
-    const bootstrapAsync = async () => {
+    const loadAuthData = async () => {
+      setIsLoading(true);
       try {
-        const { token: storedToken, user: storedUser } = await getStoredAuthData();
+        const { token: storedToken, user: storedUser } = await authService.getStoredAuthData();
         if (storedToken && storedUser) {
           setToken(storedToken);
           setUser(storedUser);
         }
-      } catch (e) {
-        console.error('Restoring token failed', e);
-        await logout();
+      } catch (e) { // FIX: Removed the stray underscore
+        console.error('Failed to load auth data:', e);
       } finally {
         setIsLoading(false);
       }
     };
 
-    bootstrapAsync();
+    loadAuthData();
   }, []);
 
-  // Memoized context value
-  const authContextValue = useMemo(() => ({
-    user,
-    token,
-    isLoading,
-    isAuthenticating,
-    
-    signIn: async (credentials: LoginCredentials) => {
-      setIsAuthenticating(true);
-      try {
-        const { user: loggedInUser, token: authToken } = await login(credentials);
-        setUser(loggedInUser);
-        setToken(authToken);
-      } finally {
-        setIsAuthenticating(false);
-      }
-    },
+  const signIn = async (credentials: LoginCredentials) => {
+    setIsAuthenticating(true);
+    try {
+      const { user, token } = await authService.login(credentials);
+      setUser(user);
+      setToken(token);
+    } catch (error) { // FIX: Removed the stray underscore
+      console.error('Sign in error:', error);
+      throw error; // Re-throw to be caught by the UI
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
 
-    signUp: async (credentials: RegisterCredentials) => {
-      setIsAuthenticating(true);
-      try {
-        const { user: registeredUser, token: authToken } = await register(credentials);
-        setUser(registeredUser);
-        setToken(authToken);
-      } finally {
-        setIsAuthenticating(false);
-      }
-    },
-    
-    signOut: async () => {
-      await logout();
-      setUser(null);
-      setToken(null);
-    },
-  }), [user, token, isLoading, isAuthenticating]);
+  const signUp = async (credentials: RegisterCredentials) => {
+    setIsAuthenticating(true);
+    try {
+      const { user, token } = await authService.register(credentials);
+      setUser(user);
+      setToken(token);
+    } catch (error) { // This one was correct, but I'll ensure it matches
+      console.error('Sign up error:', error);
+      throw error; // Re-throw
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  const signOut = async () => {
+    await authService.logout();
+    setUser(null);
+    setToken(null);
+  };
 
   return (
-    <AuthContext.Provider value={authContextValue}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        isAuthenticating,
+        isLoading,
+        signIn,
+        signUp,
+        signOut,
+      }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-// Custom hook to consume the AuthContext
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {

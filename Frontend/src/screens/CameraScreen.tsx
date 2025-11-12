@@ -8,41 +8,41 @@ import {
   Dimensions,
   ActivityIndicator,
 } from 'react-native';
-// FIX: Remove CameraType import, it's just a string literal.
-// Import Camera for static permission methods, and CameraView for the component.
+// FIX: Import CameraView for the component, Camera for permissions
 import { Camera, CameraView } from 'expo-camera';
-// FIX: Import LocationObject type correctly
 import * as Location from 'expo-location';
 import { FontAwesome5, MaterialIcons, Ionicons } from '@expo/vector-icons';
 
-// --- Type Definitions ---
+// This is the full location data we need
+export interface CapturedLocation {
+  coords: Location.LocationObjectCoords;
+  address: Location.LocationGeocodedAddress | null;
+}
+
 interface CameraScreenProps {
-  onCapture: (mediaUri: string, location: Location.LocationObject | null) => void;
+  onCapture: (mediaUri: string, location: CapturedLocation | null) => void;
   onClose: () => void;
 }
 
 const { width } = Dimensions.get('window');
-const CAMERA_SIZE = width;
 const PRIMARY_COLOR = '#007AFF';
 const DANGER_COLOR = '#FF3B30';
 
 const CameraScreen = ({ onCapture, onClose }: CameraScreenProps) => {
-  // FIX: The ref should be for the CameraView component
+  // FIX: Ref is for CameraView
   const cameraRef = useRef<CameraView | null>(null);
-
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
-  // FIX: Use string literal type and 'back' as default string value
-  const [type, setType] = useState<'front' | 'back'>('back');
-  const [location, setLocation] = useState<Location.LocationObject | null>(null);
+  // FIX: 'facing' prop uses a simple string
+  const [facing, setFacing] = useState<'front' | 'back'>('back');
+  const [location, setLocation] = useState<CapturedLocation | null>(null);
+  const [locationStatus, setLocationStatus] = useState('Fetching...');
 
-  // --- Permission Handlers ---
   useEffect(() => {
     const requestPermissions = async () => {
+      // FIX: Use static Camera.requestCameraPermissionsAsync()
       const { status: cameraStatus } = await Camera.requestCameraPermissionsAsync();
-      // FIX: Removed the stray underscore that caused the syntax error
       const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
-
       const allGranted = cameraStatus === 'granted' && locationStatus === 'granted';
 
       if (!allGranted) {
@@ -53,22 +53,38 @@ const CameraScreen = ({ onCapture, onClose }: CameraScreenProps) => {
       setHasPermission(true);
 
       try {
+        setLocationStatus('Fetching location...');
         const currentLocation = await Location.getCurrentPositionAsync({});
-        setLocation(currentLocation);
+        
+        setLocationStatus('Fetching address...');
+        const geocoded = await Location.reverseGeocodeAsync({
+          latitude: currentLocation.coords.latitude,
+          longitude: currentLocation.coords.longitude,
+        });
+
+        const capturedLocation: CapturedLocation = {
+          coords: currentLocation.coords,
+          address: geocoded[0] || null,
+        };
+        
+        setLocation(capturedLocation);
+        setLocationStatus('Location Ready');
+
       } catch (error) {
         console.error('Error getting location:', error);
-        Alert.alert('Location Error', 'Could not fetch location. Using null.');
+        setLocationStatus('Location Error');
+        Alert.alert('Location Error', 'Could not fetch location or address. Using null.');
       }
     };
 
     requestPermissions();
   }, []);
 
-  // --- Photo Capture Logic ---
   const takePicture = async () => {
     if (cameraRef.current) {
       setIsCapturing(true);
       try {
+        // FIX: Use takePictureAsync from the CameraView ref
         const photo = await cameraRef.current.takePictureAsync({
           quality: 0.5,
           exif: true,
@@ -88,7 +104,6 @@ const CameraScreen = ({ onCapture, onClose }: CameraScreenProps) => {
     }
   };
 
-  // --- Render Logic ---
   if (hasPermission === null || hasPermission === false) {
     return (
       <View style={styles.loadingContainer}>
@@ -102,8 +117,8 @@ const CameraScreen = ({ onCapture, onClose }: CameraScreenProps) => {
 
   return (
     <View style={styles.container}>
-      {/* FIX: Use CameraView and the `facing` prop */}
-      <CameraView ref={cameraRef} style={styles.camera} facing={type} ratio="16:9">
+      {/* FIX: Use CameraView component and 'facing' prop */}
+      <CameraView ref={cameraRef} style={styles.camera} facing={facing} ratio="16:9">
         {isCapturing && (
           <View style={styles.overlay}>
             <ActivityIndicator size="large" color="#fff" />
@@ -115,28 +130,25 @@ const CameraScreen = ({ onCapture, onClose }: CameraScreenProps) => {
         </TouchableOpacity>
       </CameraView>
 
-      {/* 2. Controls */}
       <View style={styles.controlsContainer}>
-        {/* Location Status */}
         <View style={styles.controlItem}>
           <MaterialIcons name="location-on" size={24} color={location ? '#28A745' : DANGER_COLOR} />
-          <Text style={styles.locationText}>{location ? 'Location Ready' : 'No Location'}</Text>
+          <Text style={styles.locationText}>{locationStatus}</Text>
         </View>
 
-        {/* Capture/Record Button */}
         <TouchableOpacity
           style={[styles.captureButton, isCapturing && { backgroundColor: '#ccc' }]}
           onPress={takePicture}
-          disabled={isCapturing}>
+          disabled={isCapturing || !location}
+        >
           <FontAwesome5 name="camera" size={30} color="#fff" />
         </TouchableOpacity>
 
-        {/* Toggle Camera Button */}
         <TouchableOpacity
           style={styles.controlItem}
           onPress={() => {
-            // FIX: Use string literals for toggling
-            setType(type === 'back' ? 'front' : 'back');
+            // FIX: Toggle the 'facing' string
+            setFacing(facing === 'back' ? 'front' : 'back');
           }}>
           <MaterialIcons name="flip-camera-ios" size={24} color="white" />
           <Text style={styles.locationText}>Flip</Text>

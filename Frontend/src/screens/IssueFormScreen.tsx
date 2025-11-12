@@ -12,16 +12,19 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { reportService } from '../services/reportService';
+// FIX: Import the location type from the updated CameraScreen
+import { CapturedLocation } from './CameraScreen';
 
 const { width } = Dimensions.get('window');
 
 interface IssueFormScreenProps {
   imageUri: string;
-  location: any;
+  // FIX: Use the new location type
+  location: CapturedLocation | null;
   onSubmit: () => void;
   onClose: () => void;
 }
-
+// ... (The rest of the file is identical to the one I provided before) ...
 const issueCategories = [
   { id: 'pothole', name: 'Hole in the road', icon: '🕳️', color: '#F59E0B' },
   { id: 'ice', name: 'Ice on the road', icon: '🧊', color: '#3B82F6' },
@@ -45,7 +48,19 @@ const IssueFormScreen = ({
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const formatAddress = () => {
+    if (!location?.address) return 'Unknown location';
+    const addr = location.address;
+    return [addr.streetNumber, addr.street, addr.city, addr.region]
+      .filter(Boolean)
+      .join(', ');
+  };
+
   const handleSubmit = async () => {
+    if (!location) {
+      Alert.alert('Error', 'Location data is missing, cannot submit.');
+      return;
+    }
     if (!description.trim()) {
       Alert.alert('Error', 'Please add a description');
       return;
@@ -54,15 +69,15 @@ const IssueFormScreen = ({
     setIsSubmitting(true);
     try {
       const reportData = {
-        latitude: location?.coords?.latitude || 0,
-        longitude: location?.coords?.longitude || 0,
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
         mediaType: 'image' as const,
         mediaUrl: imageUri,
         description: description.trim(),
-        address: location?.address?.street,
-        city: location?.address?.city,
-        state: location?.address?.region,
-        zipCode: location?.address?.postalCode,
+        address: formatAddress(),
+        city: location.address?.city || '',
+        state: location.address?.region || '',
+        zipCode: location.address?.postalCode || '',
       };
 
       const response = await reportService.createReport(reportData);
@@ -74,22 +89,16 @@ const IssueFormScreen = ({
       } else {
         Alert.alert('Error', response.message || 'Failed to submit report');
       }
-    } catch (error) {
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } catch (error: any) {
+      console.error('Submit error:', error.response?.data || error.message);
+      Alert.alert('Error', error.response?.data?.message || 'Something went wrong. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const formatAddress = () => {
-    if (!location?.address) return 'Unknown location';
-    const addr = location.address;
-    return `${addr.street || ''} ${addr.city || ''}, ${addr.region || ''}`.trim();
-  };
-
   return (
     <View style={styles.container}>
-      {/* Image Preview */}
       <View style={styles.imageContainer}>
         <Image source={{ uri: imageUri }} style={styles.image} />
         <TouchableOpacity onPress={onClose} style={styles.backButton}>
@@ -98,10 +107,22 @@ const IssueFormScreen = ({
         <Text style={styles.headerTitle}>Report an Issue</Text>
       </View>
 
-      {/* Form */}
       <View style={styles.formContainer}>
         <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Issue Category */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Issue location</Text>
+            <View style={styles.locationContainer}>
+              <Ionicons name="location" size={20} color="#8B5CF6" />
+              <View style={styles.locationInfo}>
+                <Text style={styles.locationText}>{formatAddress()}</Text>
+                <Text style={styles.locationCoords}>
+                  {location?.coords?.latitude.toFixed(6)},{' '}
+                  {location?.coords?.longitude.toFixed(6)}
+                </Text>
+              </View>
+            </View>
+          </View>
+
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Issue category</Text>
             <View style={styles.categoryContainer}>
@@ -126,25 +147,6 @@ const IssueFormScreen = ({
             </View>
           </View>
 
-          {/* Issue Location */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Issue location</Text>
-            <View style={styles.locationContainer}>
-              <Ionicons name="location" size={20} color="#8B5CF6" />
-              <View style={styles.locationInfo}>
-                <Text style={styles.locationText}>{formatAddress()}</Text>
-                <Text style={styles.locationCoords}>
-                  {location?.coords?.latitude.toFixed(6)},{' '}
-                  {location?.coords?.longitude.toFixed(6)}
-                </Text>
-              </View>
-              <TouchableOpacity>
-                <Text style={styles.changeButton}>Change</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Issue Priority */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Issue priority</Text>
             <View style={styles.priorityContainer}>
@@ -171,7 +173,6 @@ const IssueFormScreen = ({
             </View>
           </View>
 
-          {/* Description */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Description</Text>
             <TextInput
@@ -186,7 +187,6 @@ const IssueFormScreen = ({
           </View>
         </ScrollView>
 
-        {/* Submit Button */}
         <TouchableOpacity
           style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
           onPress={handleSubmit}
@@ -199,7 +199,7 @@ const IssueFormScreen = ({
     </View>
   );
 };
-// ... (Your existing styles for IssueFormScreen.tsx) ...
+// ... (styles remain the same) ...
 const styles = StyleSheet.create({
   container: {
     flex: 1,

@@ -1,31 +1,39 @@
 import axios from 'axios';
+import * as SecureStore from 'expo-secure-store';
+// FIX: Corrected path to config
+import { config } from '../src/config';
 
 // ------------------------------------------------------------------------------------
-// CRITICAL: REPLACE 'YOUR_LAN_IP_ADDRESS' below with the actual IP (e.g., 192.168.1.XX)
-// This IP must be accessible by your phone on the same Wi-Fi network.
+// CRITICAL: PASTE YOUR PUBLIC CODESPACE URL FOR PORT 3000 (with /api)
 // ------------------------------------------------------------------------------------
-const LAN_IP = 'https://bookish-space-sniffle-ggrx9pq764vcv9vp-3000.app.github.dev/api'; 
-const DEPLOYED_URL = 'https://your-render-app.onrender.com/api'; // For future deployment
+const CODESPACE_URL = 'https://bookish-space-sniffle-ggrx9pq764vcv9vp-3000.app.github.dev/api';
+const DEPLOYED_URL = 'https://your-render-app.onrender.com/api';
 
-// Determine the base URL based on the environment
-const baseURL = __DEV__ ? LAN_IP : DEPLOYED_URL;
+const baseURL = __DEV__ ? CODESPACE_URL : DEPLOYED_URL;
 
 const apiClient = axios.create({
   baseURL: baseURL,
   headers: {
     'Accept': 'application/json',
-    // The 'Authorization' header will be added dynamically by your authentication service
   },
-  timeout: 15000, // 15 second timeout for API calls
+  timeout: 15000,
 });
 
-// Optional: Add a request interceptor to attach JWT token to every request
-// apiClient.interceptors.request.use(async (config) => {
-//   const token = await AsyncStorage.getItem('userToken'); 
-//   if (token) {
-//     config.headers.Authorization = `Bearer ${token}`;
-//   }
-//   return config;
-// });
+// FIX: Enable the request interceptor
+apiClient.interceptors.request.use(
+  async (axiosConfig) => {
+    // 1. Get the token from where AuthContext stored it
+    const token = await SecureStore.getItemAsync(config.AUTH_TOKEN_KEY);
+    
+    // 2. If the token exists, add it to the Authorization header
+    if (token) {
+      axiosConfig.headers.Authorization = `Bearer ${token}`;
+    }
+    return axiosConfig;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 export default apiClient;

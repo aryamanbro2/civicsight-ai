@@ -13,7 +13,6 @@ const LoadingScreen = () => (
 
 // Create a separate component for the main app logic
 const MainApp = () => {
-  // FIX: Get `token` from useAuth and derive `isAuthenticated`
   const { token, isLoading } = useAuth();
   const isAuthenticated = !!token; // App is authenticated if a token exists
 
