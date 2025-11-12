@@ -18,7 +18,6 @@ import IssueFormScreen from './IssueFormScreen';
 const { width } = Dimensions.get('window');
 
 const DashboardScreen = () => {
-  // FIX: Changed `logout` to `signOut` to match AuthContext
   const { user, signOut } = useAuth();
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,14 +39,14 @@ const DashboardScreen = () => {
         setReports(response.reports);
         setStatistics(response.statistics);
       }
-    } catch (error) {
-      console.error('Error loading reports:', error);
+    } catch (error: any) {
+      console.error('Error loading reports:', error.message);
+      Alert.alert('Error', error.message || 'Could not load reports');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // This handler is now compatible with the rewritten CameraScreen
   const handleImageCapture = (imageUri: string, location: any) => {
     setCapturedImage(imageUri);
     setCapturedLocation(location);
@@ -68,7 +67,7 @@ const DashboardScreen = () => {
       {
         text: 'Logout',
         style: 'destructive',
-        onPress: signOut, // FIX: Use signOut
+        onPress: signOut,
       },
     ]);
   };
@@ -160,7 +159,11 @@ const DashboardScreen = () => {
             <View style={styles.issueHeader}>
               <View>
                 <Text style={styles.issueTitle}>{reports[0].issueType}</Text>
-                <Text style={styles.issueNumber}>Issue #{reports[0].id.slice(-6)}</Text>
+                {/* --- THIS IS THE FIX --- */}
+                {/* Add a check to make sure reports[0].id is not undefined */}
+                <Text style={styles.issueNumber}>
+                  Issue #{reports[0].id ? reports[0].id.slice(-6) : 'N/A'}
+                </Text>
               </View>
               <View
                 style={[
@@ -175,7 +178,7 @@ const DashboardScreen = () => {
               <View style={styles.statusItem}>
                 <Text style={styles.statusLabel}>Pending</Text>
                 <Text style={styles.statusTime}>
-                  {new Date(reports[0].submittedAt).toLocaleDateString()}
+                  {new Date(reports[0].createdAt).toLocaleDateString()}
                 </Text>
               </View>
               <View style={styles.statusItem}>
@@ -211,7 +214,7 @@ const DashboardScreen = () => {
                 <View style={styles.reportDetails}>
                   <Text style={styles.reportTitle}>{report.issueType}</Text>
                   <Text style={styles.reportLocation}>
-                    {report.fullAddress || 'Unknown location'}
+                    {report.location.address || 'Unknown location'}
                   </Text>
                 </View>
               </View>
@@ -250,7 +253,8 @@ const DashboardScreen = () => {
     </View>
   );
 };
-// ... (Your existing styles for DashboardScreen.tsx) ...
+
+// ... (styles remain the same) ...
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -450,4 +454,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default DashboardScreen;
+export default DashboardScreen ;

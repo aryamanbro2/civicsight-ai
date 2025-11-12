@@ -1,285 +1,117 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { config } from '../config';
+import apiClient from '../../api/axiosConfig';
+// You can remove this type, we will redefine it
+// import { CreateReportRequest, CreateReportResponse } from '../components/types'; 
 
-export interface CreateReportRequest {
-    latitude: number;
-    longitude: number;
-    mediaType: 'image' | 'audio';
-    mediaUrl: string;
-    description: string;
-    address?: string;
-    city?: string;
-    state?: string;
-    zipCode?: string;
-}
+// --- Interfaces ---
+// (We define the types here for simplicity)
 
 export interface Report {
-    id: string;
-    userId: string;
-    issueType: string;
-    severityScore: number;
-    description: string;
-    location: {
-        latitude: number;
-        longitude: number;
-        address?: string;
-        city?: string;
-        state?: string;
-        zipCode?: string;
-    };
-    media: {
-        images: {
-            url: string;
-            caption?: string;
-            uploadedAt: string;
-        }[];
-        audio: {
-            url: string;
-            duration?: number;
-            uploadedAt: string;
-        }[];
-    };
-    status: string;
-    priority: string;
-    tags: string[];
-    submittedAt: string;
-    lastUpdatedAt: string;
-    fullAddress?: string;
-    ageInDays?: number;
+  id: string;
+  userId: string;
+  issueType: string;
+  description: string;
+  mediaUrl: string; // This will be a path like 'uploads/image-123.jpg'
+  mediaType: 'image' | 'video' | 'audio';
+  location: {
+    coordinates: [number, number];
+    address: string;
+  };
+  status: 'pending' | 'in_progress' | 'completed' | 'rejected';
+  priority: 'low' | 'medium' | 'high';
+  createdAt: string; // ISO Date string
+  updatedAt: string; // ISO Date string
 }
 
-export interface ReportResponse {
-    success?: boolean;
-    message: string;
-    report?: Report;
-    reports?: Report[];
-    pagination?: {
-        currentPage: number;
-        totalPages: number;
-        totalCount: number;
-        hasNext: boolean;
-        hasPrev: boolean;
-    };
-    statistics?: {
-        statusBreakdown: Record<string, number>;
-        priorityBreakdown: Record<string, number>;
-        issueTypeBreakdown: Record<string, number>;
-    };
+// This is the data object the IssueFormScreen will create
+export interface CreateReportData {
+  latitude: number;
+  longitude: number;
+  description: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  imageUri: string; // The local file URI from the camera
 }
 
-const getAuthToken = async (): Promise<string | null> => {
-    return await AsyncStorage.getItem(config.AUTH_TOKEN_KEY);
+export interface CreateReportResponse {
+  message: string;
+  success: boolean;
+  report: Report;
+}
+
+export interface MyReportsResponse {
+  message: string;
+  success: boolean;
+  count: number;
+  reports: Report[];
+  statistics: any; // Add a proper type for stats later
+}
+
+// --- API Service ---
+
+/**
+ * Creates a new report by uploading the image and form data
+ * @param {CreateReportData} data - The report data from the form
+ * @returns {Promise<CreateReportResponse>}
+ */
+const createReport = async (data: CreateReportData): Promise<CreateReportResponse> => {
+  try {
+    // 1. Create FormData
+    const formData = new FormData();
+
+    // 2. Append all the text fields
+    formData.append('latitude', data.latitude.toString());
+    formData.append('longitude', data.longitude.toString());
+    formData.append('description', data.description);
+    formData.append('address', data.address);
+    formData.append('city', data.city);
+    formData.append('state', data.state);
+    formData.append('zipCode', data.zipCode);
+
+    // 3. Append the image file
+    const uri = data.imageUri;
+    const uriParts = uri.split('.');
+    const fileType = uriParts[uriParts.length - 1];
+    
+    formData.append('image', {
+      uri,
+      name: `photo.${fileType}`,
+      type: `image/${fileType}`,
+    } as any); // Use 'as any' to bypass strict type checking
+
+    // 4. Send the request with the correct headers
+    const response = await apiClient.post('/reports', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        // Auth token is added by the interceptor
+      },
+    });
+
+    return response.data;
+  } catch (error: any) {
+    console.error('Error creating report:', error.response?.data || error.message);
+    throw new Error(error.response?.data?.message || 'Failed to create report');
+  }
 };
 
-const createApiRequest = (endpoint: string, options: RequestInit = {}): Promise<Response> => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), config.API_TIMEOUT);
-
-    return fetch(`${config.API_BASE_URL}${endpoint}`, {
-        ...options,
-        signal: controller.signal,
-    }).finally(() => {
-        clearTimeout(timeoutId);
+/**
+* Fetches the reports for the currently authenticated user
+* @returns {Promise<MyReportsResponse>}
+*/
+const getMyReports = async (page = 1, limit = 10): Promise<MyReportsResponse> => {
+  try {
+    const response = await apiClient.get('/reports/my', {
+      params: { page, limit },
     });
+    return response.data;
+  } catch (error: any) {
+    console.error('Error fetching my reports:', error.response?.data || error.message);
+    throw new Error(error.response?.data?.message || 'Failed to fetch reports');
+  }
 };
 
 export const reportService = {
-    // Create a new report
-    createReport: async (reportData: CreateReportRequest): Promise<ReportResponse> => {
-        try {
-            const token = await getAuthToken();
-            if (!token) {
-                return {
-                    success: false,
-                    message: 'Authentication required',
-                };
-            }
-
-            const response = await createApiRequest('/api/reports', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify(reportData),
-            });
-
-            const data = await response.json();
-
-            if (response.ok) {
-                return {
-                    success: true,
-                    message: data.message,
-                    report: data.report,
-                };
-            } else {
-                return {
-                    success: false,
-                    message: data.message || 'Failed to create report',
-                };
-            }
-        } catch (error) {
-            console.error('Create report error:', error);
-            if (error instanceof Error && error.name === 'AbortError') {
-                return {
-                    success: false,
-                    message: 'Request timeout. Please try again.',
-                };
-            }
-            return {
-                success: false,
-                message: 'Network error. Please try again.',
-            };
-        }
-    },
-
-    // Get user's reports
-    getMyReports: async (page = 1, limit = 20): Promise<ReportResponse> => {
-        try {
-            const token = await getAuthToken();
-            if (!token) {
-                return {
-                    success: false,
-                    message: 'Authentication required',
-                };
-            }
-
-            const response = await createApiRequest(
-                `/api/reports/my?page=${page}&limit=${limit}`,
-                {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`,
-                    },
-                }
-            );
-
-            const data = await response.json();
-
-            if (response.ok) {
-                return {
-                    success: true,
-                    message: data.message,
-                    reports: data.reports,
-                    pagination: data.pagination,
-                    statistics: data.statistics,
-                };
-            } else {
-                return {
-                    success: false,
-                    message: data.message || 'Failed to fetch reports',
-                };
-            }
-        } catch (error) {
-            console.error('Get reports error:', error);
-            if (error instanceof Error && error.name === 'AbortError') {
-                return {
-                    success: false,
-                    message: 'Request timeout. Please try again.',
-                };
-            }
-            return {
-                success: false,
-                message: 'Network error. Please try again.',
-            };
-        }
-    },
-
-    // Get specific report by ID
-    getReportById: async (reportId: string): Promise<ReportResponse> => {
-        try {
-            const token = await getAuthToken();
-            if (!token) {
-                return {
-                    success: false,
-                    message: 'Authentication required',
-                };
-            }
-
-            const response = await createApiRequest(`/api/reports/${reportId}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
-            });
-
-            const data = await response.json();
-
-            if (response.ok) {
-                return {
-                    success: true,
-                    message: data.message,
-                    report: data.report,
-                };
-            } else {
-                return {
-                    success: false,
-                    message: data.message || 'Failed to fetch report',
-                };
-            }
-        } catch (error) {
-            console.error('Get report error:', error);
-            if (error instanceof Error && error.name === 'AbortError') {
-                return {
-                    success: false,
-                    message: 'Request timeout. Please try again.',
-                };
-            }
-            return {
-                success: false,
-                message: 'Network error. Please try again.',
-            };
-        }
-    },
-
-    // Update report status
-    updateReportStatus: async (reportId: string, status: string): Promise<ReportResponse> => {
-        try {
-            const token = await getAuthToken();
-            if (!token) {
-                return {
-                    success: false,
-                    message: 'Authentication required',
-                };
-            }
-
-            const response = await createApiRequest(`/api/reports/${reportId}/status`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify({ status }),
-            });
-
-            const data = await response.json();
-
-            if (response.ok) {
-                return {
-                    success: true,
-                    message: data.message,
-                    report: data.report,
-                };
-            } else {
-                return {
-                    success: false,
-                    message: data.message || 'Failed to update report',
-                };
-            }
-        } catch (error) {
-            console.error('Update report error:', error);
-            if (error instanceof Error && error.name === 'AbortError') {
-                return {
-                    success: false,
-                    message: 'Request timeout. Please try again.',
-                };
-            }
-            return {
-                success: false,
-                message: 'Network error. Please try again.',
-            };
-        }
-    },
+  createReport,
+  getMyReports,
 };

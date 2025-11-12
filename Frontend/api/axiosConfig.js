@@ -19,7 +19,8 @@ const apiClient = axios.create({
   timeout: 15000,
 });
 
-// FIX: Enable the request interceptor
+// FIX: This interceptor is now ENABLED.
+// This code runs BEFORE every API request.
 apiClient.interceptors.request.use(
   async (axiosConfig) => {
     // 1. Get the token from where AuthContext stored it

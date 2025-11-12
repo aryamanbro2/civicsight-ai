@@ -6,7 +6,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   isAuthenticating: boolean;
-  isLoading: boolean;
+  isLoading: boolean; // This was missing from your provider
   signIn: (credentials: LoginCredentials) => Promise<void>;
   signUp: (credentials: RegisterCredentials) => Promise<void>;
   signOut: () => void;
@@ -14,16 +14,19 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// FIX: Define props for AuthProvider
 interface AuthProviderProps {
   children: ReactNode;
 }
 
+// FIX: Remove deprecated React.FC and use the Props interface
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // Default to true
 
+  // FIX: Uncomment the useEffect to load auth data
   useEffect(() => {
     const loadAuthData = async () => {
       setIsLoading(true);
@@ -33,13 +36,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           setToken(storedToken);
           setUser(storedUser);
         }
-      } catch (e) { // FIX: Removed the stray underscore
+      } catch (e) {
         console.error('Failed to load auth data:', e);
       } finally {
         setIsLoading(false);
       }
     };
-
     loadAuthData();
   }, []);
 
@@ -49,7 +51,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const { user, token } = await authService.login(credentials);
       setUser(user);
       setToken(token);
-    } catch (error) { // FIX: Removed the stray underscore
+    } catch (error) {
       console.error('Sign in error:', error);
       throw error; // Re-throw to be caught by the UI
     } finally {
@@ -63,7 +65,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const { user, token } = await authService.register(credentials);
       setUser(user);
       setToken(token);
-    } catch (error) { // This one was correct, but I'll ensure it matches
+    } catch (error) {
       console.error('Sign up error:', error);
       throw error; // Re-throw
     } finally {
@@ -77,17 +79,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setToken(null);
   };
 
+  // FIX: Provide the complete value object
+  const value = {
+    user,
+    token,
+    isAuthenticating,
+    isLoading,
+    signIn,
+    signUp,
+    signOut,
+  };
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        token,
-        isAuthenticating,
-        isLoading,
-        signIn,
-        signUp,
-        signOut,
-      }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

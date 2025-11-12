@@ -1,15 +1,12 @@
 /**
  * Models Index
- * Central export point for all Mongoose models
- * 
- * @author CivicSight AI Team
- * @version 1.0.0
+ * Exports all Mongoose models from one central file.
  */
 
+const User = require('./User');
 const Report = require('./Report');
 
 module.exports = {
+  User,
   Report
 };
-
-// needs to be fixed

@@ -1,88 +1,48 @@
 /**
- * Authentication Routes (B-01, M-01)
- * Defines all authentication-related API endpoints
- * 
- * Features implemented:
- * - User signup and login
- * - Profile management
- * - Token generation and testing
- * - User management (for testing)
- * 
- * @author CivicSight AI Team
- * @version 1.0.0
+ * Auth Routes (R-01)
+ * Defines API endpoints for user authentication (signup, login, profile).
  */
 
 const express = require('express');
+// FIX: Removed imports for verifyOTP and resendOTP
+const { signup, login, getProfile, updateProfile, getAllUsers } = require('../controllers/authController');
+const { requireAuth } = require('../middleware/auth');
+
 const router = express.Router();
-const { authController } = require('../controllers');
-const { authMiddleware } = require('../middleware');
 
-// Public authentication routes (no auth required)
-router.post('/signup', authController.signup);
-router.post('/login', authController.login);
+// --- Public Auth Routes ---
 
-// Protected authentication routes (require authentication)
-router.get('/profile', authMiddleware.authenticateToken, authController.getProfile);
-router.put('/profile', authMiddleware.authenticateToken, authController.updateProfile);
+// POST /api/auth/signup
+// Register a new user
+router.post('/signup', signup);
 
-// Testing and utility routes
-router.get('/test', authMiddleware.authenticateToken, (req, res) => {
-  res.json({
-    message: 'Authentication successful',
-    user: req.user,
-    authInfo: req.authInfo,
-    timestamp: new Date().toISOString()
-  });
-});
+// POST /api/auth/login
+// Log in a user (originally with phone, now email/pass)
+router.post('/login', login);
 
-router.get('/optional', authMiddleware.optionalAuth, (req, res) => {
-  res.json({
-    message: 'Optional authentication endpoint',
-    authenticated: !!req.user,
-    user: req.user || null,
-    timestamp: new Date().toISOString()
-  });
-});
+// POST /api/auth/verify-otp
+// Verify the OTP sent to the user
+// FIX: Commented out, as this logic was removed from the controller
+// router.post('/verify-otp', verifyOTP);
 
-// Role-based authentication routes
-router.get('/admin', authMiddleware.authenticateToken, authMiddleware.requireRole('admin'), (req, res) => {
-  res.json({
-    message: 'Admin access granted',
-    user: req.user,
-    timestamp: new Date().toISOString()
-  });
-});
+// POST /api/auth/resend-otp
+// Resend the OTP to the user
+// FIX: Commented out, as this logic was removed from the controller
+// router.post('/resend-otp', resendOTP);
 
-router.get('/authority', authMiddleware.authenticateToken, authMiddleware.requireRole(['authority', 'admin']), (req, res) => {
-  res.json({
-    message: 'Authority access granted',
-    user: req.user,
-    timestamp: new Date().toISOString()
-  });
-});
+// --- Protected Auth Routes ---
+// These routes require a valid JWT token (via requireAuth middleware)
 
-// Token generation route
-router.get('/generate-token/:userId', (req, res) => {
-  try {
-    const { userId } = req.params;
-    const token = authMiddleware.generateToken(userId, { expiresIn: '24h' });
-    
-    res.json({
-      message: 'Token generated successfully',
-      token,
-      userId,
-      expiresIn: '24h',
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    res.status(500).json({
-      error: 'Token generation failed',
-      message: error.message
-    });
-  }
-});
+// GET /api/auth/profile
+// Get the authenticated user's profile
+router.get('/profile', requireAuth, getProfile);
 
-// User management routes (for testing purposes)
-router.get('/users', authController.getAllUsers);
+// PUT /api/auth/profile
+// Update the authenticated user's profile
+router.put('/profile', requireAuth, updateProfile);
+
+// GET /api/auth/users
+// Get a list of all users (for admin/testing)
+router.get('/users', requireAuth, getAllUsers);
 
 module.exports = router;

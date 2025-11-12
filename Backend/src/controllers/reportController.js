@@ -1,581 +1,220 @@
-/**
- * Report Controller (B-05, B-06)
- * Handles citizen report endpoints for issue reporting system
- * 
- * Features implemented:
- * - Create new citizen reports (B-05)
- * - Media attachment support (B-06)
- * - Hardcoded ML values (B-02, B-04 placeholders)
- * - Authentication required for all operations
- * 
- * @author CivicSight AI Team
- * @version 1.0.0
- */
+
 
 const { Report } = require('../models');
-const mongoose = require('mongoose');
+const axios = require('axios');
+
+// --- AI Service Configuration ---
+// FIX: Replace 'http://localhost:5000' with your public Codespace URL for port 5000.
+// Find this in the "Ports" tab and make sure it's set to Public.
+const AI_SERVICE_URL = 'https://bookish-space-sniffle-ggrx9pq764vcv9vp-5000.app.github.dev';
 
 /**
- * Validate latitude and longitude coordinates
- * @param {number} latitude - Latitude coordinate
- * @param {number} longitude - Longitude coordinate
- * @returns {Object} Validation result with isValid and error message
+ * Get the server's public URL from the request
  */
-const validateCoordinates = (latitude, longitude) => {
-  if (typeof latitude !== 'number' || typeof longitude !== 'number') {
-    return {
-      isValid: false,
-      error: 'Latitude and longitude must be valid numbers'
-    };
-  }
-
-  if (latitude < -90 || latitude > 90) {
-    return {
-      isValid: false,
-      error: 'Latitude must be between -90 and 90 degrees'
-    };
-  }
-
-  if (longitude < -180 || longitude > 180) {
-    return {
-      isValid: false,
-      error: 'Longitude must be between -180 and 180 degrees'
-    };
-  }
-
-  return { isValid: true };
+const getServerBaseUrl = (req) => {
+  const host = req.get('x-forwarded-host') || req.get('host');
+  const protocol = req.get('x-forwarded-proto') || req.protocol;
+  return `${protocol}://${host}`;
 };
 
 /**
- * Validate media type and URL
- * @param {string} mediaType - Type of media (image, audio, video)
- * @param {string} mediaUrl - URL of the media file
- * @returns {Object} Validation result with isValid and error message
- */
-const validateMedia = (mediaType, mediaUrl) => {
-  const validMediaTypes = ['image', 'audio', 'video'];
-  
-  if (!mediaType || !validMediaTypes.includes(mediaType.toLowerCase())) {
-    return {
-      isValid: false,
-      error: `Media type must be one of: ${validMediaTypes.join(', ')}`
-    };
-  }
-
-  if (!mediaUrl || typeof mediaUrl !== 'string') {
-    return {
-      isValid: false,
-      error: 'Media URL is required and must be a string'
-    };
-  }
-
-  // Basic URL validation
-  try {
-    new URL(mediaUrl);
-  } catch (error) {
-    return {
-      isValid: false,
-      error: 'Media URL must be a valid URL'
-    };
-  }
-
-  return { isValid: true };
-};
-
-/**
- * Create a new citizen report (B-05, B-06)
+ * Create a new report (M-02)
  * POST /api/reports
- * 
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
  */
-const createReport = async (req, res) => {
+const createReport = async (req, res, next) => {
   try {
-    const { latitude, longitude, mediaType, mediaUrl, description, address, city, state, zipCode } = req.body;
-    const userId = req.userId; // From auth middleware
+    const userId = req.userId; // From requireAuth middleware
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'Validation failed', message: 'Image file is required', code: 'MISSING_IMAGE' });
+    }
 
-    // Validate required fields
-    if (!latitude || longitude === undefined) {
-      return res.status(400).json({
-        error: 'Validation failed',
-        message: 'Latitude and longitude are required',
-        code: 'MISSING_COORDINATES'
+    const { latitude, longitude, description, address, city, state, zipCode } = req.body;
+
+    if (!latitude || !longitude || !description) {
+       return res.status(400).json({ error: 'Validation failed', message: 'Latitude, longitude, and description are required', code: 'MISSING_FIELDS' });
+    }
+
+    // 1. Construct the public URL for the uploaded image
+    const serverBaseUrl = getServerBaseUrl(req);
+    const publicImageUrl = `${serverBaseUrl}/${req.file.path}`;
+
+    console.log(`[Report] Image uploaded, public URL: ${publicImageUrl}`);
+
+    // 2. Call the AI Microservice
+    let aiResponse = { issue_type: 'unknown', severity: 'unknown', priority: 'low', severity_score: 0 };
+    
+    // FIX: The correct endpoint is /api/ai/classify
+    const aiEndpoint = `${AI_SERVICE_URL}/api/ai/classify`;
+
+    try {
+      console.log(`[Report] Calling AI service at ${aiEndpoint}...`);
+      const aiResult = await axios.post(aiEndpoint, {
+        image_url: publicImageUrl
       });
-    }
-
-    if (!mediaType || !mediaUrl) {
-      return res.status(400).json({
-        error: 'Validation failed',
-        message: 'Media type and media URL are required',
-        code: 'MISSING_MEDIA'
-      });
-    }
-
-    if (!description || description.trim().length === 0) {
-      return res.status(400).json({
-        error: 'Validation failed',
-        message: 'Report description is required',
-        code: 'MISSING_DESCRIPTION'
-      });
-    }
-
-    // Validate coordinates
-    const coordValidation = validateCoordinates(latitude, longitude);
-    if (!coordValidation.isValid) {
-      return res.status(400).json({
-        error: 'Validation failed',
-        message: coordValidation.error,
-        code: 'INVALID_COORDINATES'
-      });
-    }
-
-    // Validate media
-    const mediaValidation = validateMedia(mediaType, mediaUrl);
-    if (!mediaValidation.isValid) {
-      return res.status(400).json({
-        error: 'Validation failed',
-        message: mediaValidation.error,
-        code: 'INVALID_MEDIA'
-      });
-    }
-
-    // Create media object based on type (B-06)
-    let mediaObject = {
-      images: [],
-      audio: []
-    };
-
-    if (mediaType.toLowerCase() === 'image') {
-      mediaObject.images = [{
-        url: mediaUrl,
-        caption: description.substring(0, 200), // Truncate for caption
-        uploadedAt: new Date()
-      }];
-    } else if (mediaType.toLowerCase() === 'audio') {
-      mediaObject.audio = [{
-        url: mediaUrl,
-        duration: 0, // Placeholder duration
-        uploadedAt: new Date()
-      }];
-    }
-
-    // Create new report with hardcoded ML values (B-02, B-04 placeholders)
-    const reportData = {
-      userId: userId, // Keep as string for now since we're using mock auth
-      issueType: 'pothole', // Hardcoded as per ML exclusion rule (B-02 placeholder)
-      severityScore: 4, // Hardcoded as per ML exclusion rule (B-04 placeholder)
-      description: description.trim(),
-      location: {
-        latitude: parseFloat(latitude),
-        longitude: parseFloat(longitude),
-        address: address || null,
-        city: city || null,
-        state: state || null,
-        zipCode: zipCode || null
-      },
-      media: mediaObject,
-      status: 'submitted',
-      priority: 'high', // Auto-calculated from severityScore (4 = high)
-      tags: ['pothole', 'road', 'safety'], // Default tags for pothole
-      contactPreferences: {
-        allowUpdates: true,
-        allowFollowUp: true,
-        preferredContactMethod: 'push_notification'
-      },
-      metadata: {
-        source: 'mobile_app',
-        deviceInfo: {
-          platform: req.headers['user-agent']?.includes('iPhone') ? 'iOS' : 'Android',
-          version: '1.0.0',
-          model: 'Unknown'
-        }
+      
+      if (aiResult.data) {
+        aiResponse = aiResult.data;
+        console.log('[Report] AI Service Response:', aiResponse);
       }
-    };
+    } catch (aiError) {
+      console.error(`[Report] AI Service Error: ${aiError.message}. Proceeding without AI data.`);
+      // Do not fail the report; just use default values
+    }
 
-    // Create and save the report
-    const newReport = new Report(reportData);
-    const savedReport = await newReport.save();
+    // 3. Create and save the new report to MongoDB
+    const newReport = new Report({
+      userId,
+      issueType: aiResponse.issue_type || 'uncategorized',
+      description,
+      mediaUrl: req.file.path,
+      mediaType: 'image',
+      location: {
+        type: 'Point',
+        coordinates: [parseFloat(longitude), parseFloat(latitude)],
+        address: address || 'Unknown address',
+        city: city || '',
+        state: state || '',
+        zipCode: zipCode || ''
+      },
+      status: 'pending',
+      severity: aiResponse.severity || 'low',
+      priority: aiResponse.priority || 'low',
+      severityScore: aiResponse.severity_score || 0,
+      aiMetadata: aiResponse
+    });
 
-    console.log(`📝 New report created: ${savedReport._id} by user ${userId}`);
+    await newReport.save();
+    
+    console.log(`[Report] New report created: ${newReport._id} by user ${userId}`);
 
-    // Return the created report (excluding sensitive data)
     res.status(201).json({
       message: 'Report created successfully',
-      report: {
-        id: savedReport._id,
-        userId: savedReport.userId,
-        issueType: savedReport.issueType,
-        severityScore: savedReport.severityScore,
-        description: savedReport.description,
-        location: savedReport.location,
-        media: savedReport.media,
-        status: savedReport.status,
-        priority: savedReport.priority,
-        tags: savedReport.tags,
-        submittedAt: savedReport.submittedAt,
-        fullAddress: savedReport.fullAddress,
-        ageInDays: savedReport.ageInDays
-      }
+      success: true,
+      report: newReport
     });
 
   } catch (error) {
-    console.error('Create report error:', error);
-
-    // Handle specific MongoDB errors
     if (error.name === 'ValidationError') {
-      const validationErrors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
         error: 'Validation failed',
-        message: 'Report data validation failed',
-        details: validationErrors,
-        code: 'REPORT_VALIDATION_ERROR'
+        message: error.message,
+        code: 'VALIDATION_ERROR'
       });
     }
-
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid data format',
-        message: 'One or more fields have invalid data types',
-        code: 'INVALID_DATA_FORMAT'
-      });
-    }
-
-    // Generic error response
-    res.status(500).json({
-      error: 'Report creation failed',
-      message: 'Internal server error while creating report',
-      code: 'REPORT_CREATION_ERROR'
-    });
+    next(error);
   }
 };
 
 /**
- * Get user's reports (alias for getUserReports)
+ * Get all reports (M-02)
  * GET /api/reports
- * 
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
  */
-const getUserReports = async (req, res) => {
+const getReports = async (req, res, next) => {
   try {
-    const userId = req.userId;
-    const { page = 1, limit = 10, status } = req.query;
-
-    // Build query
-    const query = { userId: userId };
-    if (status) {
-      query.status = status;
-    }
-
-    // Calculate pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const limitNum = parseInt(limit);
-
-    // Get reports with pagination
-    const reports = await Report.find(query)
-      .sort({ submittedAt: -1 })
-      .skip(skip)
-      .limit(limitNum)
-      .select('-metadata.ipAddress -metadata.userAgent'); // Exclude sensitive data
-
-    // Get total count for pagination
-    const totalCount = await Report.countDocuments(query);
-
-    console.log(`📊 Retrieved ${reports.length} reports for user ${userId}`);
+    const reports = await Report.find()
+      .populate('userId', 'name email')
+      .sort({ createdAt: -1 });
 
     res.json({
       message: 'Reports retrieved successfully',
-      reports: reports.map(report => ({
-        id: report._id,
-        issueType: report.issueType,
-        severityScore: report.severityScore,
-        description: report.description,
-        location: report.location,
-        media: report.media,
-        status: report.status,
-        priority: report.priority,
-        tags: report.tags,
-        submittedAt: report.submittedAt,
-        lastUpdatedAt: report.lastUpdatedAt,
-        fullAddress: report.fullAddress,
-        ageInDays: report.ageInDays
-      })),
-      pagination: {
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(totalCount / limitNum),
-        totalCount,
-        hasNext: skip + limitNum < totalCount,
-        hasPrev: page > 1
-      }
+      success: true,
+      count: reports.length,
+      reports: reports
     });
-
   } catch (error) {
-    console.error('Get user reports error:', error);
-    res.status(500).json({
-      error: 'Report retrieval failed',
-      message: 'Internal server error while fetching reports',
-      code: 'REPORT_RETRIEVAL_ERROR'
-    });
+    next(error);
   }
 };
 
 /**
- * Get user's reports (my reports endpoint)
+ * Get reports for the authenticated user (M-02)
  * GET /api/reports/my
- * 
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
  */
-const getMyReports = async (req, res) => {
+const getMyReports = async (req, res, next) => {
   try {
-    const userId = req.userId;
-    const { page = 1, limit = 20, status, issueType, priority } = req.query;
+    const myReports = await Report.find({ userId: req.userId }).sort({ createdAt: -1 });
 
-    // Build query for user's reports
-    const query = { userId: userId };
-    
-    // Add optional filters
-    if (status) {
-      query.status = status;
-    }
-    if (issueType) {
-      query.issueType = issueType;
-    }
-    if (priority) {
-      query.priority = priority;
-    }
-
-    // Calculate pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const limitNum = parseInt(limit);
-
-    // Get reports with pagination, sorted by creation date descending
-    const reports = await Report.find(query)
-      .sort({ submittedAt: -1 }) // Sort by creation date descending
-      .skip(skip)
-      .limit(limitNum)
-      .select('-metadata.ipAddress -metadata.userAgent'); // Exclude sensitive data
-
-    // Get total count for pagination
-    const totalCount = await Report.countDocuments(query);
-
-    // Get summary statistics
-    const statusCounts = await Report.aggregate([
-      { $match: { userId: userId } },
-      { $group: { _id: '$status', count: { $sum: 1 } } }
-    ]);
-
-    const priorityCounts = await Report.aggregate([
-      { $match: { userId: userId } },
-      { $group: { _id: '$priority', count: { $sum: 1 } } }
-    ]);
-
-    const issueTypeCounts = await Report.aggregate([
-      { $match: { userId: userId } },
-      { $group: { _id: '$issueType', count: { $sum: 1 } } }
-    ]);
-
-    console.log(`📊 Retrieved ${reports.length} reports for user ${userId} (my reports)`);
+    const stats = {
+      total: myReports.length,
+      pending: myReports.filter(r => r.status === 'pending').length,
+      in_progress: myReports.filter(r => r.status === 'in_progress').length,
+      completed: myReports.filter(r => r.status === 'completed').length,
+    };
 
     res.json({
-      message: 'My reports retrieved successfully',
-      reports: reports.map(report => ({
-        id: report._id,
-        issueType: report.issueType,
-        severityScore: report.severityScore,
-        description: report.description,
-        location: report.location,
-        media: report.media,
-        status: report.status,
-        priority: report.priority,
-        tags: report.tags,
-        assignedTo: report.assignedTo,
-        resolution: report.resolution,
-        submittedAt: report.submittedAt,
-        lastUpdatedAt: report.lastUpdatedAt,
-        fullAddress: report.fullAddress,
-        ageInDays: report.ageInDays
-      })),
-      pagination: {
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(totalCount / limitNum),
-        totalCount,
-        hasNext: skip + limitNum < totalCount,
-        hasPrev: page > 1
-      },
-      statistics: {
-        statusBreakdown: statusCounts.reduce((acc, item) => {
-          acc[item._id] = item.count;
-          return acc;
-        }, {}),
-        priorityBreakdown: priorityCounts.reduce((acc, item) => {
-          acc[item._id] = item.count;
-          return acc;
-        }, {}),
-        issueTypeBreakdown: issueTypeCounts.reduce((acc, item) => {
-          acc[item._id] = item.count;
-          return acc;
-        }, {})
-      }
+      message: 'User reports retrieved successfully',
+      success: true,
+      count: myReports.length,
+      reports: myReports,
+      statistics: stats
     });
-
   } catch (error) {
-    console.error('Get my reports error:', error);
-    res.status(500).json({
-      error: 'Report retrieval failed',
-      message: 'Internal server error while fetching my reports',
-      code: 'MY_REPORTS_RETRIEVAL_ERROR'
-    });
+    next(error);
   }
 };
 
 /**
- * Get a specific report by ID
+ * Get a single report by ID (M-02)
  * GET /api/reports/:id
- * 
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
  */
-const getReportById = async (req, res) => {
+const getReportById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const userId = req.userId;
-
-    // Validate ObjectId format
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        error: 'Invalid report ID',
-        message: 'Report ID must be a valid MongoDB ObjectId',
-        code: 'INVALID_REPORT_ID'
-      });
-    }
-
-    // Find report by ID and user ID (users can only access their own reports)
-    const report = await Report.findOne({
-      _id: new mongoose.Types.ObjectId(id),
-      userId: userId
-    });
+    const report = await Report.findById(id).populate('userId', 'name email');
 
     if (!report) {
-      return res.status(404).json({
-        error: 'Report not found',
-        message: 'Report not found or you do not have permission to access it',
-        code: 'REPORT_NOT_FOUND'
-      });
+      return res.status(404).json({ error: 'Report not found', code: 'NOT_FOUND' });
     }
-
-    console.log(`📄 Retrieved report ${id} for user ${userId}`);
 
     res.json({
       message: 'Report retrieved successfully',
-      report: {
-        id: report._id,
-        userId: report.userId,
-        issueType: report.issueType,
-        severityScore: report.severityScore,
-        description: report.description,
-        location: report.location,
-        media: report.media,
-        status: report.status,
-        priority: report.priority,
-        tags: report.tags,
-        assignedTo: report.assignedTo,
-        resolution: report.resolution,
-        contactPreferences: report.contactPreferences,
-        submittedAt: report.submittedAt,
-        lastUpdatedAt: report.lastUpdatedAt,
-        fullAddress: report.fullAddress,
-        ageInDays: report.ageInDays
-      }
+      success: true,
+      report
     });
-
   } catch (error) {
-    console.error('Get report by ID error:', error);
-    res.status(500).json({
-      error: 'Report retrieval failed',
-      message: 'Internal server error while fetching report',
-      code: 'REPORT_RETRIEVAL_ERROR'
-    });
+    next(error);
   }
 };
 
 /**
- * Update report status (for testing purposes)
+ * Update report status (M-02)
  * PUT /api/reports/:id/status
- * 
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
  */
-const updateReportStatus = async (req, res) => {
+const updateReportStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
-    const userId = req.userId;
 
-    // Validate ObjectId format
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        error: 'Invalid report ID',
-        message: 'Report ID must be a valid MongoDB ObjectId',
-        code: 'INVALID_REPORT_ID'
-      });
+    if (!['pending', 'in_progress', 'completed', 'rejected'].includes(status)) {
+      return res.status(404).json({ error: 'Validation failed', message: 'Invalid status', code: 'INVALID_STATUS' });
     }
 
-    // Validate status
-    const validStatuses = ['submitted', 'under_review', 'in_progress', 'resolved', 'rejected', 'duplicate'];
-    if (!status || !validStatuses.includes(status)) {
-      return res.status(400).json({
-        error: 'Invalid status',
-        message: `Status must be one of: ${validStatuses.join(', ')}`,
-        code: 'INVALID_STATUS'
-      });
-    }
-
-    // Find and update report
-    const report = await Report.findOneAndUpdate(
-      {
-        _id: new mongoose.Types.ObjectId(id),
-        userId: userId
-      },
-      { 
-        status,
-        lastUpdatedAt: new Date()
-      },
-      { new: true }
+    const updatedReport = await Report.findByIdAndUpdate(
+      id,
+      { status: status },
+      { new: true, runValidators: true }
     );
 
-    if (!report) {
-      return res.status(404).json({
-        error: 'Report not found',
-        message: 'Report not found or you do not have permission to update it',
-        code: 'REPORT_NOT_FOUND'
-      });
+    if (!updatedReport) {
+      return res.status(404).json({ error: 'Report not found', code: 'NOT_FOUND' });
     }
 
-    console.log(`📝 Updated report ${id} status to ${status} by user ${userId}`);
+    console.log(`[Report] Status for ${id} updated to ${status} by user ${req.userId}`);
 
     res.json({
       message: 'Report status updated successfully',
-      report: {
-        id: report._id,
-        status: report.status,
-        lastUpdatedAt: report.lastUpdatedAt
-      }
+      success: true,
+      report: updatedReport
     });
-
   } catch (error) {
-    console.error('Update report status error:', error);
-    res.status(500).json({
-      error: 'Report update failed',
-      message: 'Internal server error while updating report',
-      code: 'REPORT_UPDATE_ERROR'
-    });
+    next(error);
   }
 };
 
 module.exports = {
   createReport,
-  getUserReports,
+  getReports,
   getMyReports,
   getReportById,
   updateReportStatus

@@ -4,28 +4,26 @@ import {
   StyleSheet,
   Text,
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
   Alert,
 } from 'react-native';
-import { FontAwesome } from '@expo/vector-icons'; // Import an icon library
+// FIX: Import SafeAreaView from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { FontAwesome } from '@expo/vector-icons';
 import { EmailAuthForm } from '../components/auth/EmailAuthForm';
-import SocialAuthButton from '../components/auth/SocialAuthButton'; // FIX: Use default import
-import Logo from '../components/common/Logo'; // FIX: Use default import
+import SocialAuthButton from '../components/auth/SocialAuthButton';
+import Logo from '../components/common/Logo';
 
 const AuthScreen = () => {
   const [isLogin, setIsLogin] = useState(true);
-  // Note: The social login functions are handled inside SocialAuthButton component or skipped here
-  // const { loginWithGoogle, loginWithApple } = useAuth(); // THIS WAS THE SOURCE OF THE ERRORS
-
   const toggleMode = () => setIsLogin((prev) => !prev);
 
-  // Dummy handler for social buttons
   const handleSocialLogin = (provider: string) => {
     Alert.alert('Not Implemented', `${provider} login is not set up yet.`);
   };
 
   return (
+    // FIX: This SafeAreaView is now from the correct package
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
@@ -49,7 +47,6 @@ const AuthScreen = () => {
           <View style={styles.dividerLine} />
         </View>
 
-        {/* FIX: Added missing props to SocialAuthButton */}
         <SocialAuthButton
           provider="Google"
           text="Continue with Google"
@@ -66,10 +63,6 @@ const AuthScreen = () => {
     </SafeAreaView>
   );
 };
-
-// ... (Your existing styles for AuthScreen.tsx) ...
-// NOTE: I've added a few styles from your description that were missing
-// in the provided file to make it render correctly.
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -120,7 +113,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
   },
-  // ... (Your other styles like socialButton, input etc. would go here)
 });
 
 export default AuthScreen;

@@ -11,20 +11,18 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+// FIX: Import the new service and types
 import { reportService } from '../services/reportService';
-// FIX: Import the location type from the updated CameraScreen
 import { CapturedLocation } from './CameraScreen';
 
 const { width } = Dimensions.get('window');
 
 interface IssueFormScreenProps {
   imageUri: string;
-  // FIX: Use the new location type
   location: CapturedLocation | null;
   onSubmit: () => void;
   onClose: () => void;
 }
-// ... (The rest of the file is identical to the one I provided before) ...
 const issueCategories = [
   { id: 'pothole', name: 'Hole in the road', icon: '🕳️', color: '#F59E0B' },
   { id: 'ice', name: 'Ice on the road', icon: '🧊', color: '#3B82F6' },
@@ -56,6 +54,7 @@ const IssueFormScreen = ({
       .join(', ');
   };
 
+  // --- THIS IS THE UPDATED FUNCTION ---
   const handleSubmit = async () => {
     if (!location) {
       Alert.alert('Error', 'Location data is missing, cannot submit.');
@@ -68,18 +67,20 @@ const IssueFormScreen = ({
 
     setIsSubmitting(true);
     try {
+      // FIX: Create the simple data object
+      // (This no longer includes mediaType or mediaUrl)
       const reportData = {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
-        mediaType: 'image' as const,
-        mediaUrl: imageUri,
         description: description.trim(),
         address: formatAddress(),
         city: location.address?.city || '',
         state: location.address?.region || '',
         zipCode: location.address?.postalCode || '',
+        imageUri: imageUri, // Pass the local image URI
       };
 
+      // FIX: Call the service. It will handle the upload.
       const response = await reportService.createReport(reportData);
 
       if (response.success) {
@@ -90,14 +91,16 @@ const IssueFormScreen = ({
         Alert.alert('Error', response.message || 'Failed to submit report');
       }
     } catch (error: any) {
-      console.error('Submit error:', error.response?.data || error.message);
-      Alert.alert('Error', error.response?.data?.message || 'Something went wrong. Please try again.');
+      console.error('Submit error:', error.message);
+      Alert.alert('Error', error.message || 'Something went wrong. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
+  // --- END OF UPDATED FUNCTION ---
 
   return (
+    // ... (The entire <View> ... </View> JSX remains the same)
     <View style={styles.container}>
       <View style={styles.imageContainer}>
         <Image source={{ uri: imageUri }} style={styles.image} />
@@ -116,8 +119,10 @@ const IssueFormScreen = ({
               <View style={styles.locationInfo}>
                 <Text style={styles.locationText}>{formatAddress()}</Text>
                 <Text style={styles.locationCoords}>
-                  {location?.coords?.latitude.toFixed(6)},{' '}
-                  {location?.coords?.longitude.toFixed(6)}
+                  {location?.coords
+                    ? `${location.coords.latitude.toFixed(6)}, ${location.coords.longitude.toFixed(6)}`
+                    : 'Coordinates not available'
+                  }
                 </Text>
               </View>
             </View>
@@ -199,7 +204,7 @@ const IssueFormScreen = ({
     </View>
   );
 };
-// ... (styles remain the same) ...
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,

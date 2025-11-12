@@ -8,7 +8,6 @@ import {
   Dimensions,
   ActivityIndicator,
 } from 'react-native';
-// FIX: Import CameraView for the component, Camera for permissions
 import { Camera, CameraView } from 'expo-camera';
 import * as Location from 'expo-location';
 import { FontAwesome5, MaterialIcons, Ionicons } from '@expo/vector-icons';
@@ -29,18 +28,15 @@ const PRIMARY_COLOR = '#007AFF';
 const DANGER_COLOR = '#FF3B30';
 
 const CameraScreen = ({ onCapture, onClose }: CameraScreenProps) => {
-  // FIX: Ref is for CameraView
   const cameraRef = useRef<CameraView | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
-  // FIX: 'facing' prop uses a simple string
   const [facing, setFacing] = useState<'front' | 'back'>('back');
   const [location, setLocation] = useState<CapturedLocation | null>(null);
   const [locationStatus, setLocationStatus] = useState('Fetching...');
 
   useEffect(() => {
     const requestPermissions = async () => {
-      // FIX: Use static Camera.requestCameraPermissionsAsync()
       const { status: cameraStatus } = await Camera.requestCameraPermissionsAsync();
       const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
       const allGranted = cameraStatus === 'granted' && locationStatus === 'granted';
@@ -84,7 +80,6 @@ const CameraScreen = ({ onCapture, onClose }: CameraScreenProps) => {
     if (cameraRef.current) {
       setIsCapturing(true);
       try {
-        // FIX: Use takePictureAsync from the CameraView ref
         const photo = await cameraRef.current.takePictureAsync({
           quality: 0.5,
           exif: true,
@@ -117,19 +112,22 @@ const CameraScreen = ({ onCapture, onClose }: CameraScreenProps) => {
 
   return (
     <View style={styles.container}>
-      {/* FIX: Use CameraView component and 'facing' prop */}
-      <CameraView ref={cameraRef} style={styles.camera} facing={facing} ratio="16:9">
-        {isCapturing && (
-          <View style={styles.overlay}>
-            <ActivityIndicator size="large" color="#fff" />
-            <Text style={styles.overlayText}>Processing Photo...</Text>
-          </View>
-        )}
-        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-          <Ionicons name="close" size={30} color="white" />
-        </TouchableOpacity>
-      </CameraView>
+      {/* --- FIX: CameraView is now a self-closing tag --- */}
+      <CameraView ref={cameraRef} style={styles.camera} facing={facing} ratio="16:9" />
 
+      {/* --- FIX: Overlay and Button are moved *outside* CameraView --- */}
+      {/* These are now rendered on top using absolute positioning */}
+      {isCapturing && (
+        <View style={styles.overlay}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.overlayText}>Processing Photo...</Text>
+        </View>
+      )}
+      <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+        <Ionicons name="close" size={30} color="white" />
+      </TouchableOpacity>
+      
+      {/* This container for controls was already outside, which is correct */}
       <View style={styles.controlsContainer}>
         <View style={styles.controlItem}>
           <MaterialIcons name="location-on" size={24} color={location ? '#28A745' : DANGER_COLOR} />
@@ -147,7 +145,6 @@ const CameraScreen = ({ onCapture, onClose }: CameraScreenProps) => {
         <TouchableOpacity
           style={styles.controlItem}
           onPress={() => {
-            // FIX: Toggle the 'facing' string
             setFacing(facing === 'back' ? 'front' : 'back');
           }}>
           <MaterialIcons name="flip-camera-ios" size={24} color="white" />
@@ -174,21 +171,24 @@ const styles = StyleSheet.create({
     color: PRIMARY_COLOR,
   },
   camera: {
-    flex: 1,
+    flex: 1, // This makes it fill the space (minus controls)
     justifyContent: 'flex-end',
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    // Style for the "Processing" overlay
+    ...StyleSheet.absoluteFillObject, // This makes it cover the entire screen
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10, // Ensure it's on top
   },
   overlayText: {
     color: '#fff',
     marginTop: 10,
   },
   closeButton: {
-    position: 'absolute',
+    // Style for the "X" button
+    position: 'absolute', // Position it on top of everything
     top: 50,
     left: 20,
     width: 40,
@@ -197,8 +197,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 20, // Ensure it's on top of the overlay
   },
   controlsContainer: {
+    // This style was correct
     height: 120,
     flexDirection: 'row',
     justifyContent: 'space-around',
