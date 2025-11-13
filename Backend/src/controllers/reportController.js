@@ -36,12 +36,12 @@ const createReport = async (req, res, next) => {
     }
 
     // 1. Construct the public URL for the uploaded image
-    const serverBaseUrl = getServerBaseUrl(req);
-    const publicImageUrl = `${serverBaseUrl}/${req.file.path}`;
+    // 1. Get the public URL from Cloudinary
+// We no longer need serverBaseUrl; req.file.path is the full public URL
+    const publicImageUrl = req.file.path; 
 
     console.log(`[Report] Image uploaded, public URL: ${publicImageUrl}`);
-
-    // 2. Call the AI Microservice
+        // 2. Call the AI Microservice
     
     // --- FIX 1: Corrected AI Endpoint URL ---
     const aiEndpoint = `${AI_SERVICE_URL}/api/ai/classify/image`;
@@ -52,17 +52,28 @@ const createReport = async (req, res, next) => {
     try {
       console.log(`[Report] Calling AI service at ${aiEndpoint}...`);
 
-      // --- FIX 2: Corrected AI Request Payload ---
       const aiResult = await axios.post(aiEndpoint, {
         mediaUrl: publicImageUrl,
         description: description
       });
-      
-      aiResponse = aiResult.data ? aiResult.data : defaultAiResponse;
+
+      // --- FIX: Check for AI-level error in a 200 OK response ---
+      if (aiResult.data && aiResult.data.error) {
+        console.error(`[Report] AI Service returned an error: ${aiResult.data.error}. Proceeding without AI data.`);
+        aiResponse = defaultAiResponse;
+      } else if (aiResult.data) {
+        // This is the successful path
+        aiResponse = aiResult.data;
+      } else {
+        // This handles empty but non-error responses
+        console.warn('[Report] AI Service gave an empty response. Proceeding without AI data.');
+        aiResponse = defaultAiResponse;
+      }
+
       console.log('[Report] AI Service Response:', aiResponse);
-      
+
     } catch (aiError) {
-      console.error(`[Report] AI Service Error: ${aiError.message}. Proceeding without AI data.`);
+      console.error(`[Report] AI Service Network Error: ${aiError.message}. Proceeding without AI data.`);
       aiResponse = defaultAiResponse;
     }
 
@@ -229,11 +240,125 @@ const updateReportStatus = async (req, res, next) => {
     next(error);
   }
 };
+const createReportWithAudio = async (req, res, next) => {
+  try {
+    const userId = req.userId;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'Validation failed', message: 'Audio file is required', code: 'MISSING_AUDIO' });
+    }
+
+    const { latitude, longitude, address, city, state, zipCode } = req.body;
+
+    if (!latitude || !longitude) {
+       return res.status(400).json({ error: 'Validation failed', message: 'Latitude and longitude are required', code: 'MISSING_FIELDS' });
+    }
+
+    // 1. Get the public URL from Cloudinary
+    const publicAudioUrl = req.file.path;
+    console.log(`[Report] Audio uploaded, public URL: ${publicAudioUrl}`);
+
+    // 2. Call the AI Microservice AUDIO endpoint
+    const aiEndpoint = `${AI_SERVICE_URL}/api/ai/classify/audio`;
+    let aiResponse;
+    const defaultAiResponse = { issueType: 'uncategorized', severityScore: 0, tags: [], description: 'Audio report (transcription pending)' };
+
+    try {
+      console.log(`[Report] Calling AI service at ${aiEndpoint}...`);
+
+      const aiResult = await axios.post(aiEndpoint, {
+        mediaUrl: publicAudioUrl,
+        description: "" // Send empty description, AI will fill it
+      });
+
+      if (aiResult.data && aiResult.data.error) {
+        console.error(`[Report] AI Service returned an error: ${aiResult.data.error}.`);
+        aiResponse = defaultAiResponse;
+      } else if (aiResult.data) {
+        aiResponse = aiResult.data;
+      } else {
+        console.warn('[Report] AI Service gave an empty response. Proceeding without AI data.');
+        aiResponse = defaultAiResponse;
+      }
+      console.log('[Report] AI Service Response:', aiResponse);
+      
+    } catch (aiError) {
+      console.error(`[Report] AI Service Network Error: ${aiError.message}.`);
+      aiResponse = defaultAiResponse;
+    }
+
+    // AI will return a 'non-civic-issue' type if transcription is just noise
+    if (aiResponse.issueType === 'non-civic-issue') {
+      return res.status(422).json({
+        error: 'Invalid Issue',
+        message: 'Audio does not appear to describe a civic issue.',
+        code: 'NON_CIVIC_ISSUE'
+      });
+    }
+
+    // 3. Derive severity/priority from the AI's score
+    const score = aiResponse.severityScore || 0;
+    let severity = 'low';
+    let priority = 'low';
+
+    if (score > 4) {
+        severity = 'high';
+        priority = 'high';
+    } else if (score > 2) {
+        severity = 'medium';
+        priority = 'medium';
+    }
+
+    // 4. Create and save the new report
+    const newReport = new Report({
+      userId,
+      // Use transcription from AI as the description
+      description: aiResponse.description || 'Audio report (transcription failed)',
+      issueType: aiResponse.issueType || 'uncategorized',
+      mediaUrl: publicAudioUrl,
+      mediaType: 'audio', // Set media type
+      location: {
+        type: 'Point',
+        coordinates: [parseFloat(longitude), parseFloat(latitude)],
+        address: address || 'Unknown address',
+        city: city || '',
+        state: state || '',
+        zipCode: zipCode || ''
+      },
+      status: 'pending',
+      severity: severity,
+      priority: priority,
+      severityScore: score,
+      aiMetadata: aiResponse
+    });
+
+    await newReport.save();
+    
+    console.log(`[Report] New audio report created: ${newReport._id} by user ${userId}`);
+
+    res.status(201).json({
+      message: 'Report created successfully from audio',
+      success: true,
+      report: newReport
+    });
+
+  } catch (error) {
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        error: 'Validation failed',
+        message: error.message,
+        code: 'VALIDATION_ERROR'
+      });
+    }
+    next(error);
+  }
+};
 
 module.exports = {
   createReport,
   getReports,
   getMyReports,
   getReportById,
-  updateReportStatus
+  updateReportStatus,
+  createReportWithAudio
 };

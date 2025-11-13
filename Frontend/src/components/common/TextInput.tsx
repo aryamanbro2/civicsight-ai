@@ -1,46 +1,55 @@
 import React from 'react';
-import { TextInput as RNTextInput, StyleSheet, View } from 'react-native';
-import { TextInputProps } from '../types';
+import { View, Text, TextInput as RNTextInput, StyleSheet, TextInputProps as RNTextInputProps, ViewStyle } from 'react-native';
 
-// FIX: Removed React.FC
-const TextInput = ({
-  placeholder,
-  value,
-  onChangeText,
-  keyboardType = 'default',
-  secureTextEntry = false,
-  autoCapitalize = 'none',
-}: TextInputProps) => {
+// --- UPDATE INTERFACE ---
+// It now accepts all React Native TextInput props
+interface TextInputProps extends RNTextInputProps {
+  label?: string;
+  error?: string;
+  style?: ViewStyle; // Explicitly add style to be merged
+}
+
+const TextInput: React.FC<TextInputProps> = ({ label, error, style, ...props }) => {
   return (
-    // Added a View wrapper for consistent margin
     <View style={styles.container}>
+      {label && <Text style={styles.label}>{label}</Text>}
       <RNTextInput
-        style={styles.input}
-        placeholder={placeholder}
-        placeholderTextColor="#999999"
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType={keyboardType}
-        autoCapitalize={autoCapitalize}
-        secureTextEntry={secureTextEntry}
+        style={[styles.input, error ? styles.inputError : null, style]} // <-- Apply style here
+        placeholderTextColor="#9CA3AF"
+        {...props} // <-- SPREAD THE REST OF THE PROPS (multiline, editable, etc.)
       />
+      {error && <Text style={styles.errorText}>{error}</Text>}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 16, // Add margin between text inputs
+    width: '100%',
+    marginVertical: 10,
+  },
+  label: {
+    fontSize: 16,
+    color: '#374151',
+    marginBottom: 8,
+    fontWeight: '600',
   },
   input: {
-    width: '100%',
-    height: 56,
+    backgroundColor: '#F3F4F6',
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    padding: 15,
     fontSize: 16,
-    backgroundColor: '#ffffff',
+    color: '#111827',
+  },
+  inputError: {
+    borderColor: '#EF4444',
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 14,
+    marginTop: 5,
   },
 });
 

@@ -1,16 +1,13 @@
 import apiClient from '../../api/axiosConfig';
-// You can remove this type, we will redefine it
-// import { CreateReportRequest, CreateReportResponse } from '../components/types'; 
 
 // --- Interfaces ---
-// (We define the types here for simplicity)
 
 export interface Report {
   id: string;
   userId: string;
   issueType: string;
   description: string;
-  mediaUrl: string; // This will be a path like 'uploads/image-123.jpg'
+  mediaUrl: string; 
   mediaType: 'image' | 'video' | 'audio';
   location: {
     coordinates: [number, number];
@@ -18,11 +15,11 @@ export interface Report {
   };
   status: 'pending' | 'in_progress' | 'completed' | 'rejected';
   priority: 'low' | 'medium' | 'high';
-  createdAt: string; // ISO Date string
-  updatedAt: string; // ISO Date string
+  createdAt: string; 
+  updatedAt: string; 
 }
 
-// This is the data object the IssueFormScreen will create
+// Data for IMAGE reports
 export interface CreateReportData {
   latitude: number;
   longitude: number;
@@ -34,33 +31,42 @@ export interface CreateReportData {
   imageUri: string; // The local file URI from the camera
 }
 
+// Data for AUDIO reports
+export interface CreateReportAudioData {
+  latitude: number;
+  longitude: number;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  audioUri: string; // The local file URI from the recorder
+}
+
 export interface CreateReportResponse {
   message: string;
   success: boolean;
   report: Report;
 }
 
-export interface MyReportsResponse {
+export interface ListReportsResponse {
   message: string;
   success: boolean;
   count: number;
   reports: Report[];
-  statistics: any; // Add a proper type for stats later
+  statistics?: any; // For 'my' reports
 }
 
 // --- API Service ---
 
 /**
- * Creates a new report by uploading the image and form data
+ * Creates a new report by uploading an IMAGE and form data
  * @param {CreateReportData} data - The report data from the form
  * @returns {Promise<CreateReportResponse>}
  */
 const createReport = async (data: CreateReportData): Promise<CreateReportResponse> => {
   try {
-    // 1. Create FormData
     const formData = new FormData();
 
-    // 2. Append all the text fields
     formData.append('latitude', data.latitude.toString());
     formData.append('longitude', data.longitude.toString());
     formData.append('description', data.description);
@@ -69,7 +75,6 @@ const createReport = async (data: CreateReportData): Promise<CreateReportRespons
     formData.append('state', data.state);
     formData.append('zipCode', data.zipCode);
 
-    // 3. Append the image file
     const uri = data.imageUri;
     const uriParts = uri.split('.');
     const fileType = uriParts[uriParts.length - 1];
@@ -78,14 +83,10 @@ const createReport = async (data: CreateReportData): Promise<CreateReportRespons
       uri,
       name: `photo.${fileType}`,
       type: `image/${fileType}`,
-    } as any); // Use 'as any' to bypass strict type checking
+    } as any); 
 
-    // 4. Send the request with the correct headers
     const response = await apiClient.post('/reports', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        // Auth token is added by the interceptor
-      },
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
 
     return response.data;
@@ -96,10 +97,45 @@ const createReport = async (data: CreateReportData): Promise<CreateReportRespons
 };
 
 /**
+ * Creates a new report by uploading an AUDIO file and form data
+ * @param {CreateReportAudioData} data - The report data from the form
+ * @returns {Promise<CreateReportResponse>}
+ */
+const createReportWithAudio = async (data: CreateReportAudioData): Promise<CreateReportResponse> => {
+  try {
+    const formData = new FormData();
+
+    formData.append('latitude', data.latitude.toString());
+    formData.append('longitude', data.longitude.toString());
+    formData.append('address', data.address);
+    formData.append('city', data.city);
+    formData.append('state', data.state);
+    formData.append('zipCode', data.zipCode);
+
+    const uri = data.audioUri;
+    formData.append('audio', {
+      uri,
+      name: `audio-${Date.now()}.m4a`,
+      type: 'audio/m4a',
+    } as any);
+
+    const response = await apiClient.post('/reports/audio', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+
+    return response.data;
+  } catch (error: any) {
+    console.error('Error creating audio report:', error.response?.data || error.message);
+    throw new Error(error.response?.data?.message || 'Failed to create audio report');
+  }
+};
+
+
+/**
 * Fetches the reports for the currently authenticated user
-* @returns {Promise<MyReportsResponse>}
+* @returns {Promise<ListReportsResponse>}
 */
-const getMyReports = async (page = 1, limit = 10): Promise<MyReportsResponse> => {
+const getMyReports = async (page = 1, limit = 10): Promise<ListReportsResponse> => {
   try {
     const response = await apiClient.get('/reports/my', {
       params: { page, limit },
@@ -111,7 +147,25 @@ const getMyReports = async (page = 1, limit = 10): Promise<MyReportsResponse> =>
   }
 };
 
+/**
+* Fetches all reports for the dashboard feed
+* @returns {Promise<ListReportsResponse>}
+*/
+const getAllReports = async (page = 1, limit = 10): Promise<ListReportsResponse> => {
+  try {
+    const response = await apiClient.get('/reports', {
+      params: { page, limit },
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error('Error fetching all reports:', error.response?.data || error.message);
+    throw new Error(error.response?.data?.message || 'Failed to fetch reports');
+  }
+};
+
 export const reportService = {
   createReport,
+  createReportWithAudio,
   getMyReports,
+  getAllReports,
 };

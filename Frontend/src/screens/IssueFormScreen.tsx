@@ -1,370 +1,278 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Image,
-  TextInput,
-  Alert,
-  Dimensions,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-// FIX: Import the new service and types
-import { reportService } from '../services/reportService';
-import { CapturedLocation } from './CameraScreen';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Alert, ScrollView, Image, Platform } from 'react-native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { Audio } from 'expo-av';
+import Button from '../components/common/Button'; // <-- FIXED: Default import
+import TextInput from '../components/common/TextInput'; // <-- FIXED: Default import
+import { createReport, createReportWithAudio } from '../services/reportService';
+import * as Location from 'expo-location';
 
-const { width } = Dimensions.get('window');
+// --- DEFINE TYPES ---
+type IssueFormRouteParams = {
+  imageUri?: string;
+};
 
-interface IssueFormScreenProps {
-  imageUri: string;
-  location: CapturedLocation | null;
-  onSubmit: () => void;
-  onClose: () => void;
-}
-const issueCategories = [
-  { id: 'pothole', name: 'Hole in the road', icon: '🕳️', color: '#F59E0B' },
-  { id: 'ice', name: 'Ice on the road', icon: '🧊', color: '#3B82F6' },
-  { id: 'debris', name: 'Other', icon: '⚠️', color: '#EF4444' },
-];
+// Specify the param list for this screen
+type RootStackParamList = {
+  IssueForm: IssueFormRouteParams;
+};
 
-const priorityLevels = [
-  { id: 'low', name: 'Low', color: '#10B981' },
-  { id: 'medium', name: 'Medium', color: '#F59E0B' },
-  { id: 'high', name: 'High', color: '#EF4444' },
-];
+type IssueFormScreenRouteProp = RouteProp<RootStackParamList, 'IssueForm'>;
 
-const IssueFormScreen = ({
-  imageUri,
-  location,
-  onSubmit,
-  onClose,
-}: IssueFormScreenProps) => {
-  const [selectedCategory, setSelectedCategory] = useState('pothole');
-  const [selectedPriority, setSelectedPriority] = useState('medium');
+const IssueFormScreen = () => {
+  const navigation = useNavigation();
+  const route = useRoute<IssueFormScreenRouteProp>(); // <-- APPLY TYPE
+  
+  // Media state
+  const [imageUri, setImageUri] = useState(route.params?.imageUri || null);
+  
+  // --- Audio State (with types) ---
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [audioUri, setAudioUri] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioPermission, setAudioPermission] = useState(false);
+
+  // --- Form state (with types) ---
   const [description, setDescription] = useState('');
+  const [location, setLocation] = useState<Location.LocationObjectCoords | null>(null);
+  const [address, setAddress] = useState<Location.LocationGeocodedAddress | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const formatAddress = () => {
-    if (!location?.address) return 'Unknown location';
-    const addr = location.address;
-    return [addr.streetNumber, addr.street, addr.city, addr.region]
-      .filter(Boolean)
-      .join(', ');
-  };
+  // Request microphone permission
+  useEffect(() => {
+    (async () => {
+      const { status } = await Audio.requestPermissionsAsync();
+      setAudioPermission(status === 'granted');
+    })();
+  }, []);
 
-  // --- THIS IS THE UPDATED FUNCTION ---
-  const handleSubmit = async () => {
-    if (!location) {
-      Alert.alert('Error', 'Location data is missing, cannot submit.');
+  // Get location
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission denied', 'Permission to access location was denied');
+        return;
+      }
+
+      let loc = await Location.getCurrentPositionAsync({});
+      setLocation(loc.coords); 
+
+      let addr = await Location.reverseGeocodeAsync(loc.coords);
+      setAddress(addr[0]); 
+    })();
+  }, []);
+
+  // --- Audio Functions ---
+  const startRecording = async () => {
+    if (!audioPermission) {
+      Alert.alert("Permission Denied", "Microphone permission is required to record audio.");
       return;
     }
-    if (!description.trim()) {
-      Alert.alert('Error', 'Please add a description');
+    
+    setImageUri(null);
+    setAudioUri(null);
+    setDescription(''); 
+    
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      
+      const { recording } = await Audio.Recording.createAsync(
+         Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      setRecording(recording); 
+      setIsRecording(true);
+      
+    } catch (err) {
+      console.error('Failed to start recording', err);
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recording) return; 
+    setIsRecording(false);
+    await recording.stopAndUnloadAsync(); 
+    const uri = recording.getURI(); 
+    setAudioUri(uri);
+    setRecording(null);
+    setDescription("Audio report (transcription pending...)");
+  };
+  
+  const handleSubmit = async () => {
+    if (!location) {
+      Alert.alert('Error', 'Could not get location. Please wait and try again.');
       return;
+    }
+    
+    if (!imageUri && !audioUri) {
+       Alert.alert('No Media', 'Please select an image or record an audio note.');
+       return;
     }
 
     setIsSubmitting(true);
-    try {
-      // FIX: Create the simple data object
-      // (This no longer includes mediaType or mediaUrl)
-      const reportData = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        description: description.trim(),
-        address: formatAddress(),
-        city: location.address?.city || '',
-        state: location.address?.region || '',
-        zipCode: location.address?.postalCode || '',
-        imageUri: imageUri, // Pass the local image URI
-      };
 
-      // FIX: Call the service. It will handle the upload.
-      const response = await reportService.createReport(reportData);
+    try {
+      let response;
+      if (imageUri) {
+        if (!description) {
+           Alert.alert('Missing Description', 'Please add a description for the image.');
+           setIsSubmitting(false);
+           return;
+        }
+        response = await createReport(imageUri, location, address, description);
+      } else if (audioUri) {
+        response = await createReportWithAudio(audioUri, location, address);
+      }
 
       if (response.success) {
-        Alert.alert('Success', 'Issue reported successfully!', [
-          { text: 'OK', onPress: onSubmit },
-        ]);
-      } else {
-        Alert.alert('Error', response.message || 'Failed to submit report');
+        Alert.alert('Success', 'Report submitted successfully!');
+        navigation.goBack(); 
       }
-    } catch (error: any) {
-      console.error('Submit error:', error.message);
-      Alert.alert('Error', error.message || 'Something went wrong. Please try again.');
-    } finally {
+    } catch (error: any) { 
       setIsSubmitting(false);
+      
+      const errorData = error.response?.data;
+      
+      if (errorData && errorData.code === 'NON_CIVIC_ISSUE') {
+        console.log('Submission failed: Not a civic issue.', errorData);
+        Alert.alert(
+          "Invalid Report",
+          errorData.message || "The media does not appear to contain a civic issue. The report was not filed."
+        );
+      } else {
+        console.error('Failed to create report:', error);
+        Alert.alert(
+          "Submission Failed",
+          "An unknown error occurred. Please try again."
+        );
+      }
     }
   };
-  // --- END OF UPDATED FUNCTION ---
 
   return (
-    // ... (The entire <View> ... </View> JSX remains the same)
-    <View style={styles.container}>
-      <View style={styles.imageContainer}>
-        <Image source={{ uri: imageUri }} style={styles.image} />
-        <TouchableOpacity onPress={onClose} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="white" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Report an Issue</Text>
-      </View>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+      <Text style={styles.title}>Submit New Report</Text>
 
-      <View style={styles.formContainer}>
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Issue location</Text>
-            <View style={styles.locationContainer}>
-              <Ionicons name="location" size={20} color="#8B5CF6" />
-              <View style={styles.locationInfo}>
-                <Text style={styles.locationText}>{formatAddress()}</Text>
-                <Text style={styles.locationCoords}>
-                  {location?.coords
-                    ? `${location.coords.latitude.toFixed(6)}, ${location.coords.longitude.toFixed(6)}`
-                    : 'Coordinates not available'
-                  }
-                </Text>
-              </View>
-            </View>
-          </View>
+      {imageUri && (
+        <View>
+          <Image source={{ uri: imageUri }} style={styles.image} />
+          <Button title="Change Image" onPress={() => navigation.goBack()} />
+        </View>
+      )}
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Issue category</Text>
-            <View style={styles.categoryContainer}>
-              {issueCategories.map((category) => (
-                <TouchableOpacity
-                  key={category.id}
-                  style={[
-                    styles.categoryButton,
-                    selectedCategory === category.id && styles.categoryButtonSelected,
-                  ]}
-                  onPress={() => setSelectedCategory(category.id)}>
-                  <Text style={styles.categoryIcon}>{category.icon}</Text>
-                  <Text
-                    style={[
-                      styles.categoryText,
-                      selectedCategory === category.id && styles.categoryTextSelected,
-                    ]}>
-                    {category.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+      {audioUri && (
+        <View style={styles.audioPrompt}>
+          <Text style={styles.audioText}>Audio report recorded.</Text>
+          <Button title="Clear Audio" onPress={() => setAudioUri(null)} style={{backgroundColor: '#aaa'}} />
+        </View>
+      )}
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Issue priority</Text>
-            <View style={styles.priorityContainer}>
-              {priorityLevels.map((priority) => (
-                <TouchableOpacity
-                  key={priority.id}
-                  style={[
-                    styles.priorityButton,
-                    selectedPriority === priority.id && [
-                      styles.priorityButtonSelected,
-                      { backgroundColor: priority.color },
-                    ],
-                  ]}
-                  onPress={() => setSelectedPriority(priority.id)}>
-                  <Text
-                    style={[
-                      styles.priorityText,
-                      selectedPriority === priority.id && styles.priorityTextSelected,
-                    ]}>
-                    {priority.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+      {!imageUri && !audioUri && (
+        <View style={styles.mediaButtons}>
+          <Button 
+            title="Select Image"
+            onPress={() => navigation.goBack()} 
+            style={{flex: 1}}
+          />
+          <Button
+            title={isRecording ? 'Stop Recording' : 'Record Audio'}
+            onPress={isRecording ? stopRecording : startRecording}
+            style={{flex: 1, backgroundColor: isRecording ? '#d9534f' : '#0275d8'}}
+          />
+        </View>
+      )}
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Description</Text>
-            <TextInput
-              style={styles.descriptionInput}
-              placeholder="Describe the issue in detail..."
-              placeholderTextColor="#999"
-              multiline
-              numberOfLines={4}
-              value={description}
-              onChangeText={setDescription}
-            />
-          </View>
-        </ScrollView>
+      <Text style={styles.label}>Description</Text>
+      <TextInput
+        value={description}
+        onChangeText={setDescription}
+        placeholder="Add a description (or record audio)"
+        multiline
+        numberOfLines={4}
+        style={styles.textInput}
+        editable={!audioUri}
+      />
 
-        <TouchableOpacity
-          style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-          onPress={handleSubmit}
-          disabled={isSubmitting}>
-          <Text style={styles.submitButtonText}>
-            {isSubmitting ? 'Submitting...' : 'Submit Issue'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      {address && ( 
+        <View style={styles.locationBox}>
+          <Text style={styles.locationTitle}>Your Location (Approx.)</Text>
+          <Text>{address.street}, {address.city}</Text>
+          <Text>{address.region}, {address.postalCode}</Text>
+        </View>
+      )}
+
+      <Button
+        title={isSubmitting ? 'Submitting...' : 'Submit Report'}
+        onPress={handleSubmit}
+        disabled={isSubmitting || (!imageUri && !audioUri)}
+      />
+    </ScrollView>
   );
 };
 
+// --- STYLES ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
   },
-  imageContainer: {
-    height: 300,
-    position: 'relative',
+  contentContainer:{
+    padding: 20,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
   },
   image: {
     width: '100%',
-    height: '100%',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 10,
   },
-  backButton: {
-    position: 'absolute',
-    top: 50,
-    left: 20,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    position: 'absolute',
-    top: 55,
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    color: 'white',
-    fontSize: 18,
+  label: {
+    fontSize: 16,
     fontWeight: '600',
-  },
-  formContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    marginTop: -24,
-    paddingHorizontal: 24,
-    paddingTop: 32,
-  },
-  section: {
-    marginBottom: 32,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 16,
-  },
-  categoryContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  categoryButton: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 8,
-    marginHorizontal: 4,
-    borderRadius: 12,
-    backgroundColor: '#F5F5F5',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  categoryButtonSelected: {
-    backgroundColor: '#FFF7ED',
-    borderColor: '#F59E0B',
-  },
-  categoryIcon: {
-    fontSize: 24,
     marginBottom: 8,
   },
-  categoryText: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    fontWeight: '500',
+  textInput: {
+    minHeight: 100,
+    textAlignVertical: 'top',
   },
-  categoryTextSelected: {
-    color: '#F59E0B',
-    fontWeight: '600',
+  locationBox: {
+    marginTop: 20,
+    marginBottom: 20,
+    padding: 15,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#eee',
   },
-  locationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    padding: 16,
-    borderRadius: 12,
-  },
-  locationInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  locationText: {
+  locationTitle: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#000',
-    marginBottom: 4,
+    fontWeight: 'bold',
+    marginBottom: 5,
   },
-  locationCoords: {
-    fontSize: 12,
-    color: '#666',
-  },
-  changeButton: {
-    color: '#8B5CF6',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  priorityContainer: {
+  mediaButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 20,
   },
-  priorityButton: {
-    flex: 1,
+  audioPrompt: {
     alignItems: 'center',
-    paddingVertical: 12,
-    marginHorizontal: 4,
+    padding: 20,
+    backgroundColor: '#f0f0f0',
     borderRadius: 8,
-    backgroundColor: '#F5F5F5',
+    marginBottom: 20,
   },
-  priorityButtonSelected: {
-    backgroundColor: '#EF4444',
-  },
-  priorityText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#666',
-  },
-  priorityTextSelected: {
-    color: 'white',
-    fontWeight: '600',
-  },
-  descriptionInput: {
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    borderRadius: 12,
-    padding: 16,
+  audioText: {
     fontSize: 16,
-    textAlignVertical: 'top',
-    minHeight: 100,
-  },
-  submitButton: {
-    backgroundColor: '#8B5CF6',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#D1D5DB',
-  },
-  submitButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
+    marginBottom: 10,
   },
 });
 

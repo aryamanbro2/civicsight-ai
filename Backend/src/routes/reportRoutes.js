@@ -1,51 +1,47 @@
 /**
  * Report Routes (R-02)
  * Defines API endpoints for managing civic issue reports.
+ * Uses Cloudinary for production-ready file storage (both image and audio).
  */
 
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const { createReport, getReports, getMyReports, getReportById, updateReportStatus } = require('../controllers/reportController');
+const { 
+  createReport, 
+  getReports, 
+  getMyReports, 
+  getReportById, 
+  updateReportStatus,
+  createReportWithAudio // Import new controller
+} = require('../controllers/reportController');
 const { requireAuth } = require('../middleware/auth');
+const { storage } = require('../config/cloudinary'); // Import Cloudinary storage
 
 const router = express.Router();
 
-// --- Multer Storage Configuration ---
-const uploadDir = 'uploads/';
-// Ensure upload directory exists
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
-}
+// --- Multer Configuration ---
 
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir); // Save files to the 'uploads' directory
-  },
-  filename: function (req, file, cb) {
-    // Create a unique filename
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
+// Multer instance for image uploads
+const uploadImage = multer({ 
+  storage: storage, 
+  limits: { fileSize: 1024 * 1024 * 10 } // 10MB limit
 });
 
-// File filter to allow only images
-const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  } else {
-    cb(new Error('Not an image! Please upload only images.'), false);
-  }
-};
-
-const upload = multer({ storage: storage, fileFilter: fileFilter, limits: { fileSize: 1024 * 1024 * 10 } }); // 10MB limit
+// Multer instance for audio uploads
+const uploadAudio = multer({
+  storage: storage,
+  limits: { fileSize: 1024 * 1024 * 20 } // 20MB limit for audio
+});
 
 // --- Report Routes (Protected by Auth) ---
 
 // POST /api/reports
-// Create a new report
-router.post('/', requireAuth, upload.single('image'), createReport);
+// Create a new report (from image)
+router.post('/', requireAuth, uploadImage.single('image'), createReport);
+
+// POST /api/reports/audio
+// Create a new report (from audio)
+router.post('/audio', requireAuth, uploadAudio.single('audio'), createReportWithAudio);
 
 // GET /api/reports
 // Get all reports (for map/feed - requires auth)

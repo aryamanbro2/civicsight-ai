@@ -1,92 +1,42 @@
 import React from 'react';
-import {
-  TouchableOpacity,
-  Text,
-  StyleSheet,
-  ViewStyle,
-  TextStyle,
-  ActivityIndicator,
-} from 'react-native';
-import { ButtonProps } from '../types/index';
+import { TouchableOpacity, Text, StyleSheet, ViewStyle } from 'react-native';
 
-// FIX: Removed React.FC
-const Button = ({
-  title,
-  onPress,
-  variant = 'primary',
-  disabled = false,
-  loading = false,
-}: ButtonProps) => {
-  const isDisabled = disabled || loading;
+interface ButtonProps {
+  title: string;
+  onPress: () => void;
+  disabled?: boolean;
+  style?: ViewStyle; // <-- ADD THIS LINE
+}
 
-  const buttonStyle: ViewStyle[] = [
-    styles.base,
-    variant === 'primary' ? styles.primary : styles.secondary,
-    isDisabled && styles.disabled,
-  ].filter(Boolean) as ViewStyle[];
-
-  const textStyle: TextStyle[] = [
-    styles.text,
-    variant === 'primary' ? styles.primaryText : styles.secondaryText,
-  ];
-
+const Button: React.FC<ButtonProps> = ({ title, onPress, disabled, style }) => {
   return (
     <TouchableOpacity
-      style={buttonStyle}
+      style={[styles.button, disabled && styles.disabled, style]} // <-- APPLY STYLE HERE
       onPress={onPress}
-      disabled={isDisabled}
-      activeOpacity={0.8}
-      accessible={true}
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      accessibilityHint={isDisabled ? 'Button is disabled' : undefined}>
-      {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? '#ffffff' : '#000000'} size="small" />
-      ) : (
-        <Text style={textStyle}>{title}</Text>
-      )}
+      disabled={disabled}
+    >
+      <Text style={styles.text}>{title}</Text>
     </TouchableOpacity>
   );
 };
-// ... (styles remain the same) ...
+
 const styles = StyleSheet.create({
-  base: {
-    width: '100%',
-    height: 56,
-    borderRadius: 12,
-    justifyContent: 'center',
+  button: {
+    backgroundColor: '#007AFF', // Example color
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderRadius: 8,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  primary: {
-    backgroundColor: '#000000',
-  },
-  secondary: {
-    backgroundColor: '#f5f5f5',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  disabled: {
-    backgroundColor: '#cccccc',
-    shadowOpacity: 0,
-    elevation: 0,
+    justifyContent: 'center',
+    marginVertical: 10,
   },
   text: {
+    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
-  primaryText: {
-    color: '#ffffff',
-  },
-  secondaryText: {
-    color: '#000000',
+  disabled: {
+    backgroundColor: '#A9A9A9',
   },
 });
 
