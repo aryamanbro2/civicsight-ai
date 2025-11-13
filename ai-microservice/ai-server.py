@@ -3,10 +3,12 @@ from pydantic import BaseModel, Field
 import uvicorn
 import os
 import sys
+from dotenv import load_dotenv  # <-- ADD THIS
 
+load_dotenv() 
 # Assume the ai_classifier functions are structured as in the previous step
 from ai_classifier import classify_image, classify_audio, load_models
-
+ # <-- ADD THIS
 # --- 1. Pydantic Request Model (Guarantees Data Contract) ---
 
 class ReportRequest(BaseModel):

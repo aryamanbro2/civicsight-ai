@@ -203,7 +203,7 @@ const DashboardScreen = () => {
           </View>
 
           {reports.slice(1).map((report) => (
-            <View key={report.id} style={styles.reportItem}>
+            <View key={report.id || report.createdAt} style={styles.reportItem}>
               <View style={styles.reportInfo}>
                 <View
                   style={[

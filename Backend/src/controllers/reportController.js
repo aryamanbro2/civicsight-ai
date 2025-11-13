@@ -42,30 +42,48 @@ const createReport = async (req, res, next) => {
     console.log(`[Report] Image uploaded, public URL: ${publicImageUrl}`);
 
     // 2. Call the AI Microservice
-    let aiResponse = { issue_type: 'unknown', severity: 'unknown', priority: 'low', severity_score: 0 };
     
-    // FIX: The correct endpoint is /api/ai/classify
-    const aiEndpoint = `${AI_SERVICE_URL}/api/ai/classify`;
+    // --- FIX 1: Corrected AI Endpoint URL ---
+    const aiEndpoint = `${AI_SERVICE_URL}/api/ai/classify/image`;
+    
+    let aiResponse;
+    const defaultAiResponse = { issueType: 'uncategorized', severityScore: 0, tags: [] };
 
     try {
       console.log(`[Report] Calling AI service at ${aiEndpoint}...`);
+
+      // --- FIX 2: Corrected AI Request Payload ---
       const aiResult = await axios.post(aiEndpoint, {
-        image_url: publicImageUrl
+        mediaUrl: publicImageUrl,
+        description: description
       });
       
-      if (aiResult.data) {
-        aiResponse = aiResult.data;
-        console.log('[Report] AI Service Response:', aiResponse);
-      }
+      aiResponse = aiResult.data ? aiResult.data : defaultAiResponse;
+      console.log('[Report] AI Service Response:', aiResponse);
+      
     } catch (aiError) {
       console.error(`[Report] AI Service Error: ${aiError.message}. Proceeding without AI data.`);
-      // Do not fail the report; just use default values
+      aiResponse = defaultAiResponse;
+    }
+
+    // --- FIX 3: Correctly parse AI response (camelCase) ---
+    const score = aiResponse.severityScore || 0;
+    let severity = 'low';
+    let priority = 'low';
+
+    // Derive severity/priority from the AI's score
+    if (score > 4) {
+        severity = 'high';
+        priority = 'high';
+    } else if (score > 2) {
+        severity = 'medium';
+        priority = 'medium';
     }
 
     // 3. Create and save the new report to MongoDB
     const newReport = new Report({
       userId,
-      issueType: aiResponse.issue_type || 'uncategorized',
+      issueType: aiResponse.issueType || 'uncategorized', // Use camelCase
       description,
       mediaUrl: req.file.path,
       mediaType: 'image',
@@ -78,9 +96,9 @@ const createReport = async (req, res, next) => {
         zipCode: zipCode || ''
       },
       status: 'pending',
-      severity: aiResponse.severity || 'low',
-      priority: aiResponse.priority || 'low',
-      severityScore: aiResponse.severity_score || 0,
+      severity: severity, // Use derived severity
+      priority: priority, // Use derived priority
+      severityScore: aiResponse.severityScore || 0, // Use camelCase
       aiMetadata: aiResponse
     });
 

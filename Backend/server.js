@@ -43,7 +43,7 @@ app.use(cors({
 
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
-
+app.use('/uploads', express.static('uploads'));
 // Request logging middleware (only in development)
 if (NODE_ENV === 'development') {
   app.use((req, res, next) => {
