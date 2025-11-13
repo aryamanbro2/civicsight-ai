@@ -1,6 +1,7 @@
 // FIX: Corrected path
 import apiClient from '../../api/axiosConfig.js';
 import * as SecureStore from 'expo-secure-store';
+
 // FIX: Corrected path
 import { User, LoginCredentials, RegisterCredentials } from '../components/types';
 // FIX: Corrected path

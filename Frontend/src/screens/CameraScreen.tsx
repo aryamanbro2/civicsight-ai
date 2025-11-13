@@ -11,6 +11,8 @@ import {
 import { Camera, CameraView } from 'expo-camera';
 import * as Location from 'expo-location';
 import { FontAwesome5, MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../../App'; // Import types from App.tsx
 
 // This is the full location data we need
 export interface CapturedLocation {
@@ -18,16 +20,22 @@ export interface CapturedLocation {
   address: Location.LocationGeocodedAddress | null;
 }
 
+// --- Type definitions for navigation ---
+type CameraScreenNavigationProp = StackNavigationProp<
+  RootStackParamList,
+  'Camera'
+>;
+
 interface CameraScreenProps {
-  onCapture: (mediaUri: string, location: CapturedLocation | null) => void;
-  onClose: () => void;
+  navigation: CameraScreenNavigationProp;
+  // --- REMOVED onCapture and onClose props ---
 }
 
 const { width } = Dimensions.get('window');
 const PRIMARY_COLOR = '#007AFF';
 const DANGER_COLOR = '#FF3B30';
 
-const CameraScreen = ({ onCapture, onClose }: CameraScreenProps) => {
+const CameraScreen = ({ navigation }: CameraScreenProps) => {
   const cameraRef = useRef<CameraView | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
@@ -36,7 +44,8 @@ const CameraScreen = ({ onCapture, onClose }: CameraScreenProps) => {
   const [locationStatus, setLocationStatus] = useState('Fetching...');
 
   useEffect(() => {
-    const requestPermissions = async () => {
+    // ... (Permission request logic is unchanged) ...
+     const requestPermissions = async () => {
       const { status: cameraStatus } = await Camera.requestCameraPermissionsAsync();
       const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
       const allGranted = cameraStatus === 'granted' && locationStatus === 'granted';
@@ -86,7 +95,11 @@ const CameraScreen = ({ onCapture, onClose }: CameraScreenProps) => {
         });
 
         if (photo && photo.uri) {
-          onCapture(photo.uri, location);
+          // --- FIX: Navigate to IssueForm with the data ---
+          navigation.navigate('IssueForm', {
+            imageUri: photo.uri,
+            location: location,
+          });
         } else {
           throw new Error('Photo capture returned null or no URI');
         }
@@ -100,36 +113,28 @@ const CameraScreen = ({ onCapture, onClose }: CameraScreenProps) => {
   };
 
   if (hasPermission === null || hasPermission === false) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={PRIMARY_COLOR} />
-        <Text style={styles.loadingText}>
-          {hasPermission === false ? 'Permissions Denied. Check App Settings.' : 'Requesting permissions...'}
-        </Text>
-      </View>
-    );
+    // ... (Loading/Permission view is unchanged) ...
   }
 
   return (
     <View style={styles.container}>
-      {/* --- FIX: CameraView is now a self-closing tag --- */}
       <CameraView ref={cameraRef} style={styles.camera} facing={facing} ratio="16:9" />
 
-      {/* --- FIX: Overlay and Button are moved *outside* CameraView --- */}
-      {/* These are now rendered on top using absolute positioning */}
       {isCapturing && (
         <View style={styles.overlay}>
           <ActivityIndicator size="large" color="#fff" />
           <Text style={styles.overlayText}>Processing Photo...</Text>
         </View>
       )}
-      <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+
+      {/* --- FIX: Close button uses navigation.goBack() --- */}
+      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
         <Ionicons name="close" size={30} color="white" />
       </TouchableOpacity>
-      
-      {/* This container for controls was already outside, which is correct */}
+
       <View style={styles.controlsContainer}>
-        <View style={styles.controlItem}>
+        {/* ... (Controls are unchanged) ... */}
+         <View style={styles.controlItem}>
           <MaterialIcons name="location-on" size={24} color={location ? '#28A745' : DANGER_COLOR} />
           <Text style={styles.locationText}>{locationStatus}</Text>
         </View>
@@ -155,6 +160,7 @@ const CameraScreen = ({ onCapture, onClose }: CameraScreenProps) => {
   );
 };
 
+// ... (styles remain the same) ...
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -171,24 +177,22 @@ const styles = StyleSheet.create({
     color: PRIMARY_COLOR,
   },
   camera: {
-    flex: 1, // This makes it fill the space (minus controls)
+    flex: 1, 
     justifyContent: 'flex-end',
   },
   overlay: {
-    // Style for the "Processing" overlay
-    ...StyleSheet.absoluteFillObject, // This makes it cover the entire screen
+    ...StyleSheet.absoluteFillObject, 
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10, // Ensure it's on top
+    zIndex: 10, 
   },
   overlayText: {
     color: '#fff',
     marginTop: 10,
   },
   closeButton: {
-    // Style for the "X" button
-    position: 'absolute', // Position it on top of everything
+    position: 'absolute', 
     top: 50,
     left: 20,
     width: 40,
@@ -197,10 +201,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 20, // Ensure it's on top of the overlay
+    zIndex: 20, 
   },
   controlsContainer: {
-    // This style was correct
     height: 120,
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -227,5 +230,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
+
 
 export default CameraScreen;

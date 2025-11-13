@@ -1,5 +1,5 @@
 import apiClient from '../../api/axiosConfig';
-
+import * as authService from './authService'; // Import authService for logout
 // --- Interfaces ---
 
 export interface Report {
@@ -12,9 +12,15 @@ export interface Report {
   location: {
     coordinates: [number, number];
     address: string;
+    city: string; // Added from backend
+    state: string; // Added from backend
+    zipCode: string; // Added from backend
   };
   status: 'pending' | 'in_progress' | 'completed' | 'rejected';
+  severity: 'low' | 'medium' | 'high'; // Added from backend (used in Report model)
   priority: 'low' | 'medium' | 'high';
+  severityScore: number; // Added from backend
+  aiMetadata?: any; // Added from backend
   createdAt: string; 
   updatedAt: string; 
 }
@@ -57,7 +63,54 @@ export interface ListReportsResponse {
 }
 
 // --- API Service ---
+const isTokenExpiredError = (error: any) => {
+  return error.response?.data?.code === 'TOKEN_EXPIRED';
+};
 
+/**
+* Fetches the reports for the currently authenticated user
+* @returns {Promise<ListReportsResponse>}
+*/
+const getMyReports = async (page = 1, limit = 10): Promise<ListReportsResponse> => {
+  try {
+    const response = await apiClient.get('/reports/my', {
+      params: { page, limit },
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error('Error fetching my reports:', error.response?.data || error.message);
+    
+    // FIX: If token is expired, sign the user out
+    if (isTokenExpiredError(error)) {
+        console.log('Token expired, forcing sign out.');
+        authService.logout(); // Clear session data
+        // Rethrow a specific error to be caught by the DashboardScreen
+        throw new Error('Token has expired. Please sign in again.');
+    }
+    
+    throw new Error(error.response?.data?.message || 'Failed to fetch reports');
+  }
+};
+
+/**
+* Fetches all reports for the dashboard feed
+* @returns {Promise<ListReportsResponse>}
+*/
+const getAllReports = async (page = 1, limit = 10): Promise<ListReportsResponse> => {
+  try {
+    const response = await apiClient.get('/reports', {
+      params: { page, limit },
+    });
+    return response.data;
+  } catch (error: any) {
+    if (isTokenExpiredError(error)) {
+        authService.logout();
+        throw new Error('Token has expired. Please sign in again.');
+    }
+    console.error('Error fetching all reports:', error.response?.data || error.message);
+    throw new Error(error.response?.data?.message || 'Failed to fetch reports');
+  }
+};
 /**
  * Creates a new report by uploading an IMAGE and form data
  * @param {CreateReportData} data - The report data from the form
@@ -135,33 +188,6 @@ const createReportWithAudio = async (data: CreateReportAudioData): Promise<Creat
 * Fetches the reports for the currently authenticated user
 * @returns {Promise<ListReportsResponse>}
 */
-const getMyReports = async (page = 1, limit = 10): Promise<ListReportsResponse> => {
-  try {
-    const response = await apiClient.get('/reports/my', {
-      params: { page, limit },
-    });
-    return response.data;
-  } catch (error: any) {
-    console.error('Error fetching my reports:', error.response?.data || error.message);
-    throw new Error(error.response?.data?.message || 'Failed to fetch reports');
-  }
-};
-
-/**
-* Fetches all reports for the dashboard feed
-* @returns {Promise<ListReportsResponse>}
-*/
-const getAllReports = async (page = 1, limit = 10): Promise<ListReportsResponse> => {
-  try {
-    const response = await apiClient.get('/reports', {
-      params: { page, limit },
-    });
-    return response.data;
-  } catch (error: any) {
-    console.error('Error fetching all reports:', error.response?.data || error.message);
-    throw new Error(error.response?.data?.message || 'Failed to fetch reports');
-  }
-};
 
 export const reportService = {
   createReport,
@@ -169,3 +195,5 @@ export const reportService = {
   getMyReports,
   getAllReports,
 };
+
+export { createReport, createReportWithAudio, getMyReports, getAllReports };

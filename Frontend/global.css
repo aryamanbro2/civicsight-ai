@@ -1,3 +1,10 @@
+/* global.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Set the default app background and text color */
+body {
+  background-color: theme('colors.background.DEFAULT');
+  color: theme('colors.text.DEFAULT');
+}

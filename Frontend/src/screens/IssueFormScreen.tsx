@@ -1,67 +1,105 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, ScrollView, Image, Platform } from 'react-native';
+import { View, Text, StyleSheet, Alert, ScrollView, Image, Platform, ActivityIndicator } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Audio } from 'expo-av';
-import Button from '../components/common/Button'; // <-- FIXED: Default import
-import TextInput from '../components/common/TextInput'; // <-- FIXED: Default import
-import { createReport, createReportWithAudio } from '../services/reportService';
+import Button from '../components/common/Button'; 
+import TextInput from '../components/common/TextInput'; 
+import { 
+    createReport, 
+    createReportWithAudio, 
+    CreateReportData,
+    CreateReportAudioData
+} from '../services/reportService';
 import * as Location from 'expo-location';
+import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+
 
 // --- DEFINE TYPES ---
 type IssueFormRouteParams = {
-  imageUri?: string;
+  imageUri?: string; // Passed from Camera or Gallery Upload
+  audioMode?: boolean; // Passed from Voice Note option on Dashboard
 };
 
-// Specify the param list for this screen
 type RootStackParamList = {
   IssueForm: IssueFormRouteParams;
 };
 
 type IssueFormScreenRouteProp = RouteProp<RootStackParamList, 'IssueForm'>;
 
+// --- UI CONSTANTS (Dark Theme) ---
+const COLORS = {
+  PRIMARY: '#BB86FC', 
+  DANGER: '#CF6679', 
+  SUCCESS: '#03DAC6',
+  CARD: '#1E1E1E',
+  TEXT: '#E0E0E0',
+  BACKGROUND: '#121212',
+  SECONDARY_TEXT: '#B0B0B0',
+  BORDER: '#333333', 
+};
+const FONT = Platform.select({ ios: 'System', android: 'Roboto', default: 'System' });
+
+
 const IssueFormScreen = () => {
   const navigation = useNavigation();
-  const route = useRoute<IssueFormScreenRouteProp>(); // <-- APPLY TYPE
+  const route = useRoute<IssueFormScreenRouteProp>();
   
   // Media state
   const [imageUri, setImageUri] = useState(route.params?.imageUri || null);
   
-  // --- Audio State (with types) ---
+  // Audio State
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [audioPermission, setAudioPermission] = useState(false);
 
-  // --- Form state (with types) ---
+  // Form state
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState<Location.LocationObjectCoords | null>(null);
   const [address, setAddress] = useState<Location.LocationGeocodedAddress | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLocationLoading, setIsLocationLoading] = useState(true);
 
-  // Request microphone permission
+  // Mode state: Controls whether to show Text Input or Audio Controls when an image is present
+  const [isTextMode, setIsTextMode] = useState(true); 
+
+  // --- INITIALIZATION EFFECTS ---
+
+  // Request permissions (Microphone & Location)
   useEffect(() => {
     (async () => {
-      const { status } = await Audio.requestPermissionsAsync();
-      setAudioPermission(status === 'granted');
-    })();
-  }, []);
+      // Audio permission
+      const { status: audioStatus } = await Audio.requestPermissionsAsync();
+      // FIX: Use 'audioStatus' instead of the undeclared 'status' to correctly set permission.
+      setAudioPermission(audioStatus === 'granted'); 
 
-  // Get location
-  useEffect(() => {
-    (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Permission to access location was denied');
+      // Location permission and fetch
+      let { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
+      if (locationStatus !== 'granted') {
+        Alert.alert('Permission denied', 'Location permission is required to submit a report.');
         return;
       }
-
-      let loc = await Location.getCurrentPositionAsync({});
-      setLocation(loc.coords); 
-
-      let addr = await Location.reverseGeocodeAsync(loc.coords);
-      setAddress(addr[0]); 
+      try {
+        let loc = await Location.getCurrentPositionAsync({ accuracy: Location.LocationAccuracy.BestForNavigation });
+        setLocation(loc.coords); 
+        let addr = await Location.reverseGeocodeAsync(loc.coords);
+        setAddress(addr[0]); 
+      } catch (e) {
+         Alert.alert('Error', 'Failed to retrieve your current location.');
+      } finally {
+        setIsLocationLoading(false);
+      }
     })();
   }, []);
+  
+  // Effect to handle initial VOICENOTE flow (if navigated directly from FAB)
+  useEffect(() => {
+    if (route.params?.audioMode && !isRecording && !audioUri) {
+        // If navigated here directly for audio, start recording immediately
+        startRecording();
+    }
+  }, [route.params?.audioMode]); // Depend on audioMode prop
 
   // --- Audio Functions ---
   const startRecording = async () => {
@@ -70,9 +108,13 @@ const IssueFormScreen = () => {
       return;
     }
     
-    setImageUri(null);
+    // Clear previous media only if starting a NEW audio report
+    if (!imageUri) {
+      setImageUri(null);
+    }
     setAudioUri(null);
     setDescription(''); 
+    setIsTextMode(false); // Force into audio mode
     
     try {
       await Audio.setAudioModeAsync({
@@ -88,6 +130,8 @@ const IssueFormScreen = () => {
       
     } catch (err) {
       console.error('Failed to start recording', err);
+      setIsRecording(false);
+      Alert.alert('Recording Failed', 'Could not start microphone.');
     }
   };
 
@@ -98,12 +142,17 @@ const IssueFormScreen = () => {
     const uri = recording.getURI(); 
     setAudioUri(uri);
     setRecording(null);
-    setDescription("Audio report (transcription pending...)");
+    setDescription("Audio report (AI transcription pending...)");
+    // If an image is present, switch back to audio controls display mode
+    if (imageUri) {
+        setIsTextMode(false); 
+    }
   };
   
+  // --- SUBMISSION LOGIC ---
   const handleSubmit = async () => {
-    if (!location) {
-      Alert.alert('Error', 'Could not get location. Please wait and try again.');
+    if (!location || !address) {
+      Alert.alert('Error', isLocationLoading ? 'Fetching location, please wait.' : 'Could not get location. Report cannot be filed.');
       return;
     }
     
@@ -112,23 +161,55 @@ const IssueFormScreen = () => {
        return;
     }
 
+    // Validation for image reports in text mode
+    if (imageUri && isTextMode && !description.trim()) {
+       Alert.alert('Missing Description', 'Please add a detailed description for the image.');
+       return;
+    }
+    
+    // Validation for image reports in audio mode (must have recorded audio)
+    if (imageUri && !isTextMode && !audioUri) {
+       Alert.alert('Missing Audio', 'Please record your description or switch to text mode.');
+       return;
+    }
+
     setIsSubmitting(true);
 
     try {
       let response;
-      if (imageUri) {
-        if (!description) {
-           Alert.alert('Missing Description', 'Please add a description for the image.');
-           setIsSubmitting(false);
-           return;
-        }
-        response = await createReport(imageUri, location, address, description);
-      } else if (audioUri) {
-        response = await createReportWithAudio(audioUri, location, address);
+
+      if (audioUri && !imageUri) {
+        // SCENARIO 1: Pure Voice Note Submission
+        const audioData: CreateReportAudioData = {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          address: address.name || address.street || '',
+          city: address.city || address.subregion || '',
+          state: address.region || '',
+          zipCode: address.postalCode || '',
+          audioUri: audioUri,
+        };
+        response = await createReportWithAudio(audioData);
+      } else if (imageUri) {
+        // SCENARIO 2: Image Submission (Description is from text or transcription)
+        const reportData: CreateReportData = {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          description: description, // Will contain text or transcription placeholder
+          address: address.name || address.street || '',
+          city: address.city || address.subregion || '',
+          state: address.region || '',
+          zipCode: address.postalCode || '',
+          imageUri: imageUri,
+        };
+        response = await createReport(reportData);
+      } else {
+         // Should be caught by the earlier check, but good for safety
+         throw new Error('No media to submit.');
       }
 
       if (response.success) {
-        Alert.alert('Success', 'Report submitted successfully!');
+        Alert.alert('✅ Success', 'Report submitted successfully! The AI will now classify your issue.');
         navigation.goBack(); 
       }
     } catch (error: any) { 
@@ -137,77 +218,149 @@ const IssueFormScreen = () => {
       const errorData = error.response?.data;
       
       if (errorData && errorData.code === 'NON_CIVIC_ISSUE') {
-        console.log('Submission failed: Not a civic issue.', errorData);
         Alert.alert(
-          "Invalid Report",
-          errorData.message || "The media does not appear to contain a civic issue. The report was not filed."
+          "❌ Invalid Report",
+          errorData.message || "The AI determined the media does not describe a civic issue. The report was not filed."
         );
       } else {
         console.error('Failed to create report:', error);
         Alert.alert(
-          "Submission Failed",
-          "An unknown error occurred. Please try again."
+          "⚠️ Submission Failed",
+          error.message || "An unknown error occurred. Please check your network and try again."
         );
       }
     }
   };
 
+  // Determine display mode
+  const isAudioOnlyMode = route.params?.audioMode;
+  const isMediaPresent = imageUri || audioUri;
+
+  // --- RENDERING HELPERS ---
+
+  const renderMediaPreview = () => {
+    if (imageUri) {
+      return (
+        <View style={styles.imagePreviewContainer}>
+          <Image source={{ uri: imageUri }} style={styles.image} />
+          <Button 
+            title="Change Photo" 
+            onPress={() => navigation.goBack()} 
+            style={styles.changeMediaButton} 
+          />
+        </View>
+      );
+    }
+    if (audioUri && isAudioOnlyMode) {
+      return (
+        <View style={[styles.audioPrompt, { borderColor: COLORS.SUCCESS }]}>
+          <Ionicons name="mic-circle-outline" size={50} color={COLORS.SUCCESS} />
+          <Text style={styles.audioText}>Audio Report Recorded</Text>
+          <Text style={styles.audioTextSub}>Ready for AI transcription.</Text>
+        </View>
+      );
+    }
+    return null;
+  };
+
+  const renderAudioControls = () => (
+    <View style={styles.audioControls}>
+      <Button
+        title={isRecording ? 'Stop Recording' : (audioUri ? 'Retake Voice Note' : 'Start Recording')}
+        onPress={isRecording ? stopRecording : startRecording}
+        style={{flex: 1, backgroundColor: isRecording ? COLORS.DANGER : (audioUri ? COLORS.DANGER : COLORS.PRIMARY)}}
+        disabled={isSubmitting}
+      />
+      {isRecording && <ActivityIndicator size="large" color={COLORS.PRIMARY} style={{marginLeft: 10}}/>}
+    </View>
+  );
+
+  const renderDescriptionInput = () => {
+      // If we are in Audio-Only Mode, show only the transcription text
+      if (isAudioOnlyMode) {
+          return (
+              <TextInput
+                  value={description}
+                  placeholder="Audio transcription pending..."
+                  multiline
+                  numberOfLines={4}
+                  style={[styles.textInput, styles.disabledInput]} 
+                  editable={false}
+              />
+          );
+      }
+      
+      // If image is present, show Text Input or Audio Controls based on isTextMode
+      return (
+          <View>
+              <View style={styles.modeToggleContainer}>
+                  <Text style={styles.label}>📝 Description Mode</Text>
+                  <Button 
+                      title={isTextMode ? 'Switch to Voice Note' : 'Switch to Text Input'}
+                      onPress={() => {
+                          setIsTextMode(!isTextMode);
+                          if (isTextMode) {
+                              // If switching to audio, clear audioUri and prepare to record
+                              setAudioUri(null);
+                              setDescription('');
+                          } else {
+                              // If switching back to text, clear audio recording state
+                              setAudioUri(null);
+                          }
+                      }}
+                      style={{backgroundColor: COLORS.CARD, borderWidth: 1, borderColor: COLORS.BORDER}}
+                  />
+              </View>
+              
+              {isTextMode ? (
+                  <TextInput
+                      value={description}
+                      onChangeText={setDescription}
+                      placeholder="Add a detailed description for the AI to analyze."
+                      multiline
+                      numberOfLines={4}
+                      style={styles.textInput} 
+                      editable={!isSubmitting}
+                  />
+              ) : (
+                  renderAudioControls()
+              )}
+          </View>
+      );
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      <Text style={styles.title}>Submit New Report</Text>
+      <Text style={styles.title}>File Issue Report</Text>
 
-      {imageUri && (
-        <View>
-          <Image source={{ uri: imageUri }} style={styles.image} />
-          <Button title="Change Image" onPress={() => navigation.goBack()} />
-        </View>
+      {renderMediaPreview()}
+      
+      {/* If only audio was intended, render controls directly. 
+          If media is present, render the flexible description input. */}
+      {route.params?.audioMode && !audioUri && !isRecording && (
+          <View style={[styles.audioPrompt, { borderColor: COLORS.PRIMARY }]}>
+             <Text style={styles.audioText}>Ready for Voice Input</Text>
+             {renderAudioControls()}
+          </View>
       )}
-
-      {audioUri && (
-        <View style={styles.audioPrompt}>
-          <Text style={styles.audioText}>Audio report recorded.</Text>
-          <Button title="Clear Audio" onPress={() => setAudioUri(null)} style={{backgroundColor: '#aaa'}} />
-        </View>
-      )}
-
-      {!imageUri && !audioUri && (
-        <View style={styles.mediaButtons}>
-          <Button 
-            title="Select Image"
-            onPress={() => navigation.goBack()} 
-            style={{flex: 1}}
-          />
-          <Button
-            title={isRecording ? 'Stop Recording' : 'Record Audio'}
-            onPress={isRecording ? stopRecording : startRecording}
-            style={{flex: 1, backgroundColor: isRecording ? '#d9534f' : '#0275d8'}}
-          />
-        </View>
-      )}
-
-      <Text style={styles.label}>Description</Text>
-      <TextInput
-        value={description}
-        onChangeText={setDescription}
-        placeholder="Add a description (or record audio)"
-        multiline
-        numberOfLines={4}
-        style={styles.textInput}
-        editable={!audioUri}
-      />
+      
+      {/* Render description input block if an image is present OR if we are in the dedicated audio mode and audio is recorded/transcribing */}
+      {(imageUri || isAudioOnlyMode) && renderDescriptionInput()}
 
       {address && ( 
         <View style={styles.locationBox}>
-          <Text style={styles.locationTitle}>Your Location (Approx.)</Text>
-          <Text>{address.street}, {address.city}</Text>
-          <Text>{address.region}, {address.postalCode}</Text>
+          <Text style={styles.locationTitle}>📍 Report Location</Text>
+          <Text style={styles.locationText}>{address.street || address.name}, {address.city || address.subregion}</Text>
+          <Text style={styles.locationSubText}>{address.region}, {address.postalCode}</Text>
+          {isLocationLoading && <ActivityIndicator size="small" color={COLORS.PRIMARY} />}
         </View>
       )}
 
       <Button
-        title={isSubmitting ? 'Submitting...' : 'Submit Report'}
+        title={isSubmitting ? 'Submitting...' : 'Submit Report via AI'}
         onPress={handleSubmit}
-        disabled={isSubmitting || (!imageUri && !audioUri)}
+        disabled={isSubmitting || !isMediaPresent || isLocationLoading || isRecording}
+        style={{backgroundColor: COLORS.SUCCESS, marginTop: 20}}
       />
     </ScrollView>
   );
@@ -217,63 +370,109 @@ const IssueFormScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.BACKGROUND,
   },
   contentContainer:{
     padding: 20,
+    paddingBottom: 40,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
     textAlign: 'center',
+    color: COLORS.TEXT,
+  },
+  imagePreviewContainer: {
+    marginBottom: 20,
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   image: {
     width: '100%',
-    height: 200,
-    borderRadius: 8,
+    height: 250,
     marginBottom: 10,
+    borderRadius: 8,
+  },
+  changeMediaButton: {
+      backgroundColor: COLORS.CARD,
+      borderColor: COLORS.BORDER,
+      borderWidth: 1,
   },
   label: {
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 8,
+    color: COLORS.TEXT,
   },
   textInput: {
     minHeight: 100,
     textAlignVertical: 'top',
+    borderColor: COLORS.BORDER,
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 16,
+    backgroundColor: COLORS.CARD,
+    color: COLORS.TEXT,
+  },
+  disabledInput: {
+    backgroundColor: COLORS.BORDER,
+    color: COLORS.SECONDARY_TEXT,
   },
   locationBox: {
     marginTop: 20,
     marginBottom: 20,
     padding: 15,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: COLORS.CARD,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: COLORS.BORDER,
   },
   locationTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 5,
+    color: COLORS.PRIMARY,
   },
-  mediaButtons: {
+  locationText: {
+      color: COLORS.TEXT,
+  },
+  locationSubText: {
+      color: COLORS.SECONDARY_TEXT,
+      fontSize: 12,
+  },
+  modeToggleContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 10,
-    marginBottom: 20,
+    alignItems: 'center',
+    marginBottom: 10,
   },
   audioPrompt: {
     alignItems: 'center',
     padding: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: COLORS.CARD,
     borderRadius: 8,
     marginBottom: 20,
+    borderWidth: 2,
+    borderStyle: 'dashed',
   },
   audioText: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 5,
+    color: COLORS.TEXT,
+  },
+  audioTextSub: {
+    fontSize: 14,
+    color: COLORS.SECONDARY_TEXT,
     marginBottom: 10,
   },
+  audioControls: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+  }
 });
 
 export default IssueFormScreen;

@@ -269,6 +269,9 @@ const createReportWithAudio = async (req, res, next) => {
       const aiResult = await axios.post(aiEndpoint, {
         mediaUrl: publicAudioUrl,
         description: "" // Send empty description, AI will fill it
+      }, {
+        // FIX: Increased timeout to 120 seconds (120000ms) for transcription
+        timeout: 120000 
       });
 
       if (aiResult.data && aiResult.data.error) {

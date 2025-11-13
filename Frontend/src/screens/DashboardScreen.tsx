@@ -1,457 +1,388 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
+import React, { useState, useCallback } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  FlatList, 
+  ActivityIndicator, 
+  Alert, 
   TouchableOpacity,
-  ScrollView,
-  RefreshControl,
-  Alert,
-  Dimensions,
+  Image,
 } from 'react-native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack'; 
+import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getMyReports, Report } from '../services/reportService';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../context/AuthContext';
-import { reportService, Report } from '../services/reportService';
-import CameraScreen from './CameraScreen';
-import IssueFormScreen from './IssueFormScreen';
 
-const { width } = Dimensions.get('window');
+// --- CONSTANTS ---
+const DARK_COLORS = {
+  BACKGROUND: '#121212', // Screen's desired background (Inner content)
+  CARD: '#1E1E1E',       // Tab bar background (Outer container to hide leak)
+  PRIMARY: '#BB86FC',    
+  ACCENT: '#03DAC6',     
+  TEXT: '#E0E0E0',       
+  SECONDARY_TEXT: '#B0B0B0', 
+  BORDER: '#333333',     
+};
+const TAB_BAR_HEIGHT_ESTIMATE = 60; 
+const TAB_BAR_BOTTOM_CLEARANCE = 0; 
 
-const DashboardScreen = () => {
-  const { user, signOut } = useAuth();
-  const [reports, setReports] = useState<Report[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [showCamera, setShowCamera] = useState(false);
-  const [showIssueForm, setShowIssueForm] = useState(false);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [capturedLocation, setCapturedLocation] = useState<any>(null);
-  const [statistics, setStatistics] = useState<any>(null);
-
-  useEffect(() => {
-    loadReports();
-  }, []);
-
-  const loadReports = async () => {
-    setIsLoading(true);
-    try {
-      const response = await reportService.getMyReports(1, 10);
-      if (response.success && response.reports) {
-        setReports(response.reports);
-        setStatistics(response.statistics);
-      }
-    } catch (error: any) {
-      console.error('Error loading reports:', error.message);
-      Alert.alert('Error', error.message || 'Could not load reports');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleImageCapture = (imageUri: string, location: any) => {
-    setCapturedImage(imageUri);
-    setCapturedLocation(location);
-    setShowCamera(false);
-    setShowIssueForm(true);
-  };
-
-  const handleIssueSubmit = () => {
-    setShowIssueForm(false);
-    setCapturedImage(null);
-    setCapturedLocation(null);
-    loadReports(); // Refresh the reports list
-  };
-
-  const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: signOut,
-      },
-    ]);
-  };
-
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return '#F59E0B';
-      case 'in_progress':
-        return '#3B82F6';
-      case 'completed':
-        return '#10B981';
-      default:
-        return '#6B7280';
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority.toLowerCase()) {
-      case 'high':
-        return '#EF4444';
-      case 'medium':
-        return '#F59E0B';
-      case 'low':
-        return '#10B981';
-      default:
-        return '#6B7280';
-    }
-  };
-
-  if (showCamera) {
-    return (
-      <CameraScreen
-        // @ts-ignore
-        onCapture={handleImageCapture}
-        onClose={() => setShowCamera(false)}
-      />
-    );
+// Function to determine colors based on AI's priority score (Same)
+const getPriorityColor = (priority: Report['priority']) => {
+  switch (priority) {
+    case 'high': return '#CF6679'; 
+    case 'medium': return '#FFB300'; 
+    case 'low': 
+    default: return '#03DAC6';
   }
+};
 
-  if (showIssueForm && capturedImage) {
-    return (
-      <IssueFormScreen
-        imageUri={capturedImage}
-        location={capturedLocation}
-        onSubmit={handleIssueSubmit}
-        onClose={() => {
-          setShowIssueForm(false);
-          setCapturedImage(null);
-          setCapturedLocation(null);
-        }}
-      />
-    );
-  }
+// --- Report Card Component (Same) ---
+const ReportCard = ({ report, onPress }: { report: Report, onPress: () => void }) => {
+  const statusColor = report.status === 'completed' 
+    ? DARK_COLORS.ACCENT
+    : report.status === 'in_progress' 
+    ? DARK_COLORS.PRIMARY
+    : '#B0B0B0'; 
+    
+  const priorityColor = getPriorityColor(report.priority);
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.content}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={loadReports} />}
-        showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <View>
-              <Text style={styles.greeting}>{getGreeting()}!</Text>
-              <Text style={styles.userName}>{user?.name || 'User'}</Text>
-            </View>
-            <TouchableOpacity onPress={handleLogout} style={styles.profileButton}>
-              <Ionicons name="person-circle" size={40} color="#8B5CF6" />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.heroSection}>
-            <Text style={styles.heroTitle}>Take care of the roads</Text>
-          </View>
-        </View>
-
-        {/* Current Issue Card */}
-        {reports.length > 0 && (
-          <View style={styles.currentIssueCard}>
-            <View style={styles.issueHeader}>
-              <View>
-                <Text style={styles.issueTitle}>{reports[0].issueType}</Text>
-                {/* --- THIS IS THE FIX --- */}
-                {/* Add a check to make sure reports[0].id is not undefined */}
-                <Text style={styles.issueNumber}>
-                  Issue #{reports[0].id ? reports[0].id.slice(-6) : 'N/A'}
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.priorityBadge,
-                  { backgroundColor: getPriorityColor(reports[0].priority) },
-                ]}>
-                <Text style={styles.priorityText}>{reports[0].priority}</Text>
-              </View>
-            </View>
-
-            <View style={styles.statusContainer}>
-              <View style={styles.statusItem}>
-                <Text style={styles.statusLabel}>Pending</Text>
-                <Text style={styles.statusTime}>
-                  {new Date(reports[0].createdAt).toLocaleDateString()}
-                </Text>
-              </View>
-              <View style={styles.statusItem}>
-                <Text style={styles.statusLabel}>In progress</Text>
-                <Text style={styles.statusTime}>--</Text>
-              </View>
-              <View style={styles.statusItem}>
-                <Text style={styles.statusLabel}>Completed</Text>
-                <Text style={styles.statusTime}>--</Text>
-              </View>
-            </View>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+      <View style={[styles.card, { borderLeftColor: priorityColor }]}>
+        
+        {/* Image Peek Section */}
+        {report.mediaType === 'image' && report.mediaUrl ? (
+          <Image 
+            source={{ uri: report.mediaUrl }} 
+            style={styles.cardImagePeek} 
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.cardImagePeek, styles.audioPeek]}>
+            <Ionicons name="mic-outline" size={40} color={DARK_COLORS.SECONDARY_TEXT} />
+            <Text style={styles.audioPeekText}>Audio Report</Text>
           </View>
         )}
 
-        {/* Reports from others */}
-        <View style={styles.reportsSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Reports from others</Text>
-            <TouchableOpacity>
-              <Text style={styles.showMoreText}>Show more</Text>
-            </TouchableOpacity>
-          </View>
-
-          {reports.slice(1).map((report) => (
-            <View key={report.id || report.createdAt} style={styles.reportItem}>
-              <View style={styles.reportInfo}>
-                <View
-                  style={[
-                    styles.reportDot,
-                    { backgroundColor: getPriorityColor(report.priority) },
-                  ]}
-                />
-                <View style={styles.reportDetails}>
-                  <Text style={styles.reportTitle}>{report.issueType}</Text>
-                  <Text style={styles.reportLocation}>
-                    {report.location.address || 'Unknown location'}
-                  </Text>
-                </View>
+        <View style={styles.cardContent}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardIssueType} numberOfLines={1}>{report.issueType.toUpperCase()}</Text>
+              <View style={[styles.priorityTag, { backgroundColor: priorityColor }]}>
+                <Text style={styles.priorityText}>{DARK_COLORS.BACKGROUND}</Text>
               </View>
-              <Text style={styles.reportDistance}>
-                {(Math.random() * 2).toFixed(1)}km
-              </Text>
             </View>
-          ))}
+            
+            <Text style={styles.cardDescription} numberOfLines={2}>
+              {report.description || `[${report.mediaType} report. Tap for details.]`}
+            </Text>
+            
+            <View style={styles.cardFooter}>
+              <View style={styles.cardLocationContainer}>
+                <Ionicons name="location-outline" size={14} color={DARK_COLORS.SECONDARY_TEXT} />
+                <Text style={styles.cardLocation} numberOfLines={1}>
+                  {report.location.address || 'Unknown Location'}
+                </Text>
+              </View>
+              <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
+                <Text style={styles.statusText}>{DARK_COLORS.BACKGROUND}</Text>
+              </View>
+            </View>
         </View>
-      </ScrollView>
-
-      {/* Floating Action Button */}
-      <TouchableOpacity style={styles.fab} onPress={() => setShowCamera(true)}>
-        <Ionicons name="camera" size={28} color="white" />
-      </TouchableOpacity>
-
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="home" size={24} color="#8B5CF6" />
-          <Text style={[styles.navText, styles.navTextActive]}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="document-text" size={24} color="#9CA3AF" />
-          <Text style={styles.navText}>My reports</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="map" size={24} color="#9CA3AF" />
-          <Text style={styles.navText}>Map</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="settings" size={24} color="#9CA3AF" />
-          <Text style={styles.navText}>Settings</Text>
-        </TouchableOpacity>
       </View>
+    </TouchableOpacity>
+  );
+};
+
+// --- Define App Route Params for Type Safety ---
+type RootStackParamList = {
+  AppTabs: undefined; 
+  ReportDetail: { report: Report }; 
+  CameraScreen: undefined;
+};
+type DashboardNavigationProp = NativeStackNavigationProp<RootStackParamList, 'AppTabs'>;
+
+
+// --- Dashboard Screen Component ---
+const DashboardScreen = () => {
+  const navigation = useNavigation<DashboardNavigationProp>(); 
+  const [myReports, setMyReports] = useState<Report[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  const insets = useSafeAreaInsets();
+  
+  const fetchMyReports = useCallback(async (initialLoad = false) => {
+    if (initialLoad) setIsLoading(true);
+    setIsRefreshing(true);
+    try {
+      const response = await getMyReports();
+      setMyReports(response.reports);
+    } catch (error: any) {
+      console.error('Error loading reports:', error.message); 
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []); 
+
+  const renderEmptyList = () => (
+    <View style={styles.emptyContainer}>
+      <Ionicons name="document-text-outline" size={50} color={DARK_COLORS.SECONDARY_TEXT} />
+      <Text style={styles.emptyText}>No issues reported yet.</Text>
+      <Text style={styles.emptyTextSub}>Use the '+' button to file your first AI-powered report!</Text>
+    </View>
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchMyReports(true); 
+      return () => {};
+    }, [fetchMyReports])
+  );
+
+  const handleCardPress = (report: Report) => {
+      navigation.navigate('ReportDetail', { report: report }); 
+  };
+
+  const handleCreateReport = () => {
+    navigation.navigate('CameraScreen'); 
+  };
+
+
+  if (isLoading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={DARK_COLORS.PRIMARY} />
+        <Text style={styles.loadingText}>Fetching reports...</Text>
+      </View>
+    );
+  }
+
+  const listContentStyle = myReports.length === 0 
+    ? styles.listContent 
+    : {}; 
+
+  const finalContentStyle = [
+    listContentStyle,
+    { paddingVertical: 10 } 
+  ].filter(Boolean);
+
+
+  return (
+    // FIX 1: Set the outer container to the CARD color (#1E1E1E) to prevent the black strip leak
+    <View style={[styles.outerContainer, { paddingTop: insets.top }]}> 
+      
+      {/* Inner View Wrapper for actual background color (#121212) */}
+      <View style={styles.innerContentWrapper}> 
+        <View style={styles.headerContainer}>
+          <Text style={styles.headerTitle}>CivicSight AI</Text>
+          <Ionicons name="person-circle-outline" size={32} color={DARK_COLORS.PRIMARY} />
+        </View>
+        
+        <FlatList
+          data={myReports}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <ReportCard report={item} onPress={() => handleCardPress(item)} />}
+          
+          // FIX 2: Apply the margin to the *FlatList* style to push it up from the bottom of the screen
+          style={{ marginBottom: TAB_BAR_BOTTOM_CLEARANCE }} 
+          
+          contentContainerStyle={finalContentStyle} 
+          
+          ListEmptyComponent={renderEmptyList} 
+          
+          onRefresh={() => fetchMyReports()} 
+          refreshing={isRefreshing}
+          showsVerticalScrollIndicator={false}
+          scrollIndicatorInsets={{ bottom: TAB_BAR_HEIGHT_ESTIMATE + insets.bottom }}
+        />
+      </View>
+
+      {/* FAB position remains fixed using 'bottom' property relative to the screen bottom */}
+      <TouchableOpacity 
+        style={[styles.fab, { bottom: -25 + insets.bottom }]} 
+        onPress={handleCreateReport}
+        activeOpacity={0.9}
+      >
+        <Ionicons name="add" size={32} color={DARK_COLORS.CARD} />
+      </TouchableOpacity>
     </View>
   );
 };
 
-// ... (styles remain the same) ...
+// --- STYLES ---
 const styles = StyleSheet.create({
-  container: {
+  // FIX: New Outer container matches Tab Bar color to stop the leak
+  outerContainer: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: DARK_COLORS.CARD, 
   },
-  content: {
+  // FIX: New Inner wrapper uses the desired screen background color
+  innerContentWrapper: {
     flex: 1,
+    backgroundColor: DARK_COLORS.BACKGROUND,
   },
-  header: {
-    backgroundColor: 'white',
-    paddingTop: 50,
-    paddingHorizontal: 20,
-    paddingBottom: 30,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+  listContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  headerTop: {
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: DARK_COLORS.BACKGROUND,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: DARK_COLORS.SECONDARY_TEXT,
+  },
+  headerContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 30,
+    padding: 15,
+    backgroundColor: DARK_COLORS.CARD, // Header also matches the card/tab bar color
+    borderBottomWidth: 1,
+    borderBottomColor: DARK_COLORS.BORDER,
   },
-  greeting: {
-    fontSize: 16,
-    color: '#6B7280',
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: DARK_COLORS.TEXT,
   },
-  userName: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#000',
-    marginTop: 4,
+  card: {
+    flexDirection: 'row',
+    backgroundColor: DARK_COLORS.CARD,
+    borderRadius: 12,
+    marginVertical: 8,
+    marginHorizontal: 15,
+    overflow: 'hidden',
+    borderLeftWidth: 6, 
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: DARK_COLORS.BORDER,
   },
-  profileButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
+  cardImagePeek: {
+    width: 100, 
+    height: '100%',
+  },
+  audioPeek: {
+    backgroundColor: DARK_COLORS.BORDER,
     justifyContent: 'center',
-  },
-  heroSection: {
     alignItems: 'center',
+    padding: 10,
   },
-  heroTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#000',
-    textAlign: 'center',
+  audioPeekText: {
+    color: DARK_COLORS.SECONDARY_TEXT,
+    fontSize: 10,
+    marginTop: 5,
   },
-  currentIssueCard: {
-    backgroundColor: '#1F2937',
-    marginHorizontal: 20,
-    marginTop: 20,
-    borderRadius: 16,
-    padding: 20,
+  cardContent: {
+    flex: 1,
+    padding: 12,
   },
-  issueHeader: {
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 20,
+    marginBottom: 5,
   },
-  issueTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: 'white',
-    marginBottom: 4,
-    textTransform: 'capitalize',
+  cardIssueType: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: DARK_COLORS.TEXT,
+    flexShrink: 1,
+    marginRight: 10,
   },
-  issueNumber: {
-    fontSize: 14,
-    color: '#9CA3AF',
-  },
-  priorityBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+  priorityTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 15,
   },
   priorityText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'capitalize',
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: DARK_COLORS.BACKGROUND,
   },
-  statusContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  cardDescription: {
+    fontSize: 13,
+    color: DARK_COLORS.SECONDARY_TEXT,
+    marginBottom: 10,
   },
-  statusItem: {
-    alignItems: 'center',
-  },
-  statusLabel: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginBottom: 4,
-  },
-  statusTime: {
-    fontSize: 12,
-    color: 'white',
-    fontWeight: '500',
-  },
-  reportsSection: {
-    paddingHorizontal: 20,
-    paddingTop: 30,
-  },
-  sectionHeader: {
+  cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginTop: 5,
+    borderTopWidth: 1,
+    borderTopColor: DARK_COLORS.BORDER,
+    paddingTop: 8,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#000',
-  },
-  showMoreText: {
-    fontSize: 14,
-    color: '#8B5CF6',
-    fontWeight: '500',
-  },
-  reportItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  reportInfo: {
+  cardLocationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    marginRight: 10,
   },
-  reportDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 16,
+  cardLocation: {
+    fontSize: 11,
+    color: DARK_COLORS.SECONDARY_TEXT,
+    marginLeft: 5,
   },
-  reportDetails: {
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: DARK_COLORS.BACKGROUND,
+  },
+  emptyContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    minHeight: 300,
   },
-  reportTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#000',
-    marginBottom: 4,
-    textTransform: 'capitalize',
+  emptyText: {
+    marginTop: 20,
+    fontSize: 18,
+    color: DARK_COLORS.SECONDARY_TEXT,
+    fontWeight: '600',
+    textAlign: 'center',
   },
-  reportLocation: {
+  emptyTextSub: {
     fontSize: 14,
-    color: '#6B7280',
-  },
-  reportDistance: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
+    color: DARK_COLORS.SECONDARY_TEXT,
+    opacity: 0.7,
+    marginTop: 5,
+    textAlign: 'center',
   },
   fab: {
     position: 'absolute',
-    bottom: 100,
-    right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#8B5CF6',
+    width: 75,
+    height: 75,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 8,
-    shadowColor: '#000',
+    right: 20,
+    backgroundColor: DARK_COLORS.PRIMARY,
+    borderRadius: 40,
+    elevation: 10,
+    shadowColor: DARK_COLORS.PRIMARY,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: 'white',
-    paddingTop: 12,
-    paddingBottom: 34,
-    paddingHorizontal: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  navItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  navText: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  navTextActive: {
-    color: '#8B5CF6',
-  },
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
+  }
 });
 
-export default DashboardScreen ;
+export default DashboardScreen;
