@@ -1,13 +1,21 @@
+/**
+ * Authentication Controller (B-01, M-01)
+ * Handles user signup, login, and profile management using MongoDB.
+ */
 const { User } = require('../models');
-const jwt = require('jsonwebtoken');
-// REMOVED: google-auth-library import
+// 1. IMPORT THE CORRECT TOKEN GENERATOR (from auth.js)
+const { generateToken } = require('../middleware/auth');
+// 2. REMOVE 'jsonwebtoken' (it's not needed here)
+// const jwt = require('jsonwebtoken');
 
-// Helper function to create a token
+// 3. REMOVE THE INCORRECT LOCAL createToken FUNCTION
+/*
 const createToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '3d' // 3 day expiry
+    expiresIn: '3d' 
   });
 };
+*/
 
 /**
  * Register a new user (B-01)
@@ -20,16 +28,16 @@ const register = async (req, res, next) => {
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Validation failed', message: 'All fields (name, email, password) are required', code: 'MISSING_FIELDS' });
     }
-
     const userExists = await User.findOne({ email });
     if (userExists) {
       return res.status(409).json({ error: 'Conflict', message: 'User already exists with this email', code: 'USER_EXISTS' });
     }
-
+    
     const user = new User({ name, email, password });
     await user.save();
     
-    const token = createToken(user._id);
+    // 4. USE THE CORRECT IMPORTED FUNCTION
+    const token = generateToken(user._id);
 
     console.log(`[Auth] New user registered: ${email} (ID: ${user._id})`);
 
@@ -74,8 +82,9 @@ const login = async (req, res, next) => {
       return res.status(401).json({ error: 'Unauthorized', message: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
     }
 
-    const token = createToken(user._id);
-    
+    // 5. USE THE CORRECT IMPORTED FUNCTION
+    const token = generateToken(user._id);
+
     console.log(`[Auth] User logged in: ${email}`);
 
     res.status(200).json({
@@ -90,10 +99,91 @@ const login = async (req, res, next) => {
   }
 };
 
-// REMOVED: googleLogin controller function
+/**
+ * Get User Profile
+ * GET /api/auth/profile
+ */
+const getProfile = async (req, res, next) => {
+  try {
+    // This logic is now correct. req.userId comes from auth.js (which finds decoded.sub)
+    const user = await User.findById(req.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found', code: 'USER_NOT_FOUND' });
+    }
+    
+    res.json({
+      message: 'Profile retrieved successfully',
+      user: user
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update User Profile
+ * PUT /api/auth/profile
+ */
+const updateProfile = async (req, res, next) => {
+  try {
+    // This logic is also correct.
+    const { name, address, phone } = req.body;
+    const updateData = {};
+
+    if (name) updateData.name = name;
+    if (address) updateData.address = address;
+    if (phone) updateData.phone = phone;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.userId,
+      { $set: updateData },
+      { new: true, runValidators: true, context: 'query' }
+    ).select('-password');
+
+    if (!updatedUser) {
+      return res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' });
+    }
+    
+    console.log(`[Auth] Profile updated: ${updatedUser._id}`);
+    
+    res.json({
+      message: 'Profile updated successfully',
+      user: updatedUser
+    });
+
+  } catch (error) {
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        error: 'Validation failed',
+        message: error.message,
+        code: 'VALIDATION_ERROR'
+      });
+    }
+    next(error);
+  }
+};
+
+/**
+ * Get all users (Admin/Test only)
+ * GET /api/auth/users
+ */
+const getAllUsers = async (req, res, next) => {
+  try {
+    const users = await User.find().select('-password');
+    res.json({
+      message: 'Users retrieved successfully',
+      count: users.length,
+      users
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 module.exports = {
   register,
   login,
-  // REMOVED: googleLogin export
+  getProfile,
+  updateProfile,
+  getAllUsers
 };

@@ -42,53 +42,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    // CRITICAL FIX: Set loading to true
     setIsLoading(true);
     try {
       const loginData: LoginData = { email, password };
       const { token, user } = await authService.login(loginData);
       
-      // CRITICAL FIX: Set the header *immediately* upon receiving the token.
+      // Set the header *immediately* upon receiving the token.
       apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
-      // Now, set state (this will trigger navigation)
       setToken(token);
       setUser(user);
       
-      // Now, save to secure store
       await SecureStore.setItemAsync('userToken', token);
       await SecureStore.setItemAsync('userData', JSON.stringify(user));
     } catch (error) {
       console.error('Sign in error:', error);
       throw error;
     } finally {
-      // CRITICAL FIX: Set loading to false when done
       setIsLoading(false);
     }
   };
 
   const register = async (name: string, email: string, password: string) => {
-    // CRITICAL FIX: Set loading to true
     setIsLoading(true);
     try {
       const registerData: RegisterData = { name, email, password };
       const { token, user } = await authService.register(registerData);
       
-      // CRITICAL FIX: Set the header *immediately* upon receiving the token.
+      // Set the header *immediately* upon receiving the token.
       apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
-      // Now, set state (this will trigger navigation)
       setToken(token);
       setUser(user);
       
-      // Now, save to secure store
       await SecureStore.setItemAsync('userToken', token);
       await SecureStore.setItemAsync('userData', JSON.stringify(user));
     } catch (error) {
       console.error('Register error:', error);
       throw error;
     } finally {
-      // CRITICAL FIX: Set loading to false when done
       setIsLoading(false);
     }
   };
@@ -99,6 +91,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await SecureStore.deleteItemAsync('userData');
       setToken(null);
       setUser(null);
+      // Clear the header on sign out
       delete apiClient.defaults.headers.common['Authorization'];
     } catch (e) {
       console.error('Failed to sign out', e);

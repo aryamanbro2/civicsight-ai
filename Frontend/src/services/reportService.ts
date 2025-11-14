@@ -1,35 +1,32 @@
-import apiClient from '../../api/axiosConfig';
-// CHANGED: No longer need to import authService here
-// import * as authService from './authService'; 
-// --- Interfaces ---
+// Frontend/src/services/reportService.ts
 
+import apiClient from '../../api/axiosConfig';
+
+// --- Interfaces ---
+// (Your existing interfaces are correct)
 export interface Report {
   id: string;
   userId: string;
   issueType: string;
   description: string;
-  
-  // CHANGED: Updated to new data model
   imageUrl: string | null; 
   audioUrl: string | null;
-
   location: {
     coordinates: [number, number];
     address: string;
-    city: string; // Added from backend
-    state: string; // Added from backend
-    zipCode: string; // Added from backend
+    city: string;
+    state: string;
+    zipCode: string;
   };
   status: 'pending' | 'in_progress' | 'completed' | 'rejected';
-  severity: 'low' | 'medium' | 'high'; // Added from backend (used in Report model)
+  severity: 'low' | 'medium' | 'high';
   priority: 'low' | 'medium' | 'high';
-  severityScore: number; // Added from backend
-  aiMetadata?: any; // Added from backend
+  severityScore: number;
+  aiMetadata?: any;
   createdAt: string; 
   updatedAt: string; 
 }
 
-// Data for IMAGE reports
 export interface CreateReportData {
   latitude: number;
   longitude: number;
@@ -38,10 +35,9 @@ export interface CreateReportData {
   city: string;
   state: string;
   zipCode: string;
-  imageUri: string; // The local file URI from the camera
+  imageUri: string;
 }
 
-// Data for AUDIO reports
 export interface CreateReportAudioData {
   latitude: number;
   longitude: number;
@@ -49,8 +45,8 @@ export interface CreateReportAudioData {
   city: string;
   state: string;
   zipCode: string;
-  audioUri: string; // The local file URI from the recorder
-  imageUri: string | null; // CHANGED: Added optional image for combo reports
+  audioUri: string;
+  imageUri: string | null;
 }
 
 export interface CreateReportResponse {
@@ -64,21 +60,28 @@ export interface ListReportsResponse {
   success: boolean;
   count: number;
   reports: Report[];
-  statistics?: any; // For 'my' reports
+  statistics?: any;
 }
 
 // --- API Service ---
-const isTokenExpiredError = (error: any) => {
-  return error.response?.data?.code === 'TOKEN_EXPIRED';
+
+/**
+ * REWRITTEN: Helper to check for all authentication-related errors.
+ */
+const isAuthError = (error: any) => {
+  const code = error.response?.data?.code;
+  return code === 'TOKEN_EXPIRED' || 
+         code === 'USER_NOT_FOUND' || 
+         code === 'INVALID_TOKEN' ||
+         code === 'AUTH_REQUIRED';
 };
 
 /**
 * Fetches the reports for the currently authenticated user
-* @returns {Promise<ListReportsResponse>}
 */
-// Note: I'm keeping your change of limit = 100
 const getMyReports = async (page = 1, limit = 10): Promise<ListReportsResponse> => {
   try {
+    // This request is automatically intercepted by axiosConfig to add the token
     const response = await apiClient.get('/reports/my', {
       params: { page, limit },
     });
@@ -86,42 +89,44 @@ const getMyReports = async (page = 1, limit = 10): Promise<ListReportsResponse> 
   } catch (error: any) {
     console.error('Error fetching my reports:', error.response?.data || error.message);
     
-    if (isTokenExpiredError(error)) {
-        console.log('Token expired, user will be logged out by UI.');
-        // CHANGED: Removed call to authService.logout()
-        // The UI (FeedScreen, etc.) will catch this specific error.
-        throw new Error('Token has expired. Please sign in again.');
+    // REWRITTEN: Catch the specific auth error and throw it for the UI.
+    if (isAuthError(error)) {
+        // Throw the specific message from the backend (e.g., "User not found")
+        throw new Error(error.response?.data?.message || 'Authentication error');
     }
     
+    // Throw a generic error for other issues (e.g., server down)
     throw new Error(error.response?.data?.message || 'Failed to fetch reports');
   }
 };
 
 /**
 * Fetches all reports for the dashboard feed
-* @returns {Promise<ListReportsResponse>}
 */
 const getAllReports = async (page = 1, limit = 10): Promise<ListReportsResponse> => {
   try {
+    // This request is automatically intercepted by axiosConfig to add the token
     const response = await apiClient.get('/reports', {
       params: { page, limit },
     });
     return response.data;
   } catch (error: any) {
-    if (isTokenExpiredError(error)) {
-        console.log('Token expired, user will be logged out by UI.');
-        // CHANGED: Removed call to authService.signOut()
-        // The UI (FeedScreen, etc.) will catch this specific error.
-        throw new Error('Token has expired. Please sign in again.');
-    }
     console.error('Error fetching all reports:', error.response?.data || error.message);
+    
+    // REWRITTEN: Catch the specific auth error and throw it for the UI.
+    if (isAuthError(error)) {
+        // Throw the specific message from the backend (e.g., "User not found")
+        throw new Error(error.response?.data?.message || 'Authentication error');
+    }
+    
+    // Throw a generic error for other issues
     throw new Error(error.response?.data?.message || 'Failed to fetch reports');
   }
 };
+
 /**
  * Creates a new report by uploading an IMAGE and form data
- * @param {CreateReportData} data - The report data from the form
- * @returns {Promise<CreateReportResponse>}
+ * (This function was correct, no changes needed)
  */
 const createReport = async (data: CreateReportData): Promise<CreateReportResponse> => {
   try {
@@ -158,8 +163,7 @@ const createReport = async (data: CreateReportData): Promise<CreateReportRespons
 
 /**
  * Creates a new report by uploading an AUDIO file (and optionally an IMAGE)
- * @param {CreateReportAudioData} data - The report data from the form
- * @returns {Promise<CreateReportResponse>}
+ * (This function was correct, no changes needed)
  */
 const createReportWithAudio = async (data: CreateReportAudioData): Promise<CreateReportResponse> => {
   try {
@@ -180,7 +184,7 @@ const createReportWithAudio = async (data: CreateReportAudioData): Promise<Creat
       type: 'audio/m4a',
     } as any);
 
-    // CHANGED: Append image if it exists
+    // Append image if it exists
     if (data.imageUri) {
       const imgUri = data.imageUri;
       const uriParts = imgUri.split('.');
@@ -199,13 +203,15 @@ const createReportWithAudio = async (data: CreateReportAudioData): Promise<Creat
     });
 
     return response.data;
-  } catch (error: any) {
+  } catch (error: any)
+    {
     console.error('Error creating audio report:', error.response?.data || error.message);
     throw new Error(error.response?.data?.message || 'Failed to create audio report');
   }
 };
 
-
+// --- Exports ---
+// (Your existing exports are correct)
 export const reportService = {
   createReport,
   createReportWithAudio,
