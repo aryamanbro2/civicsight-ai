@@ -1,83 +1,89 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Alert, ActivityIndicator } from 'react-native';
-import Button from '../common/Button'; // FIX: Use default import
-import TextInput from '../common/TextInput'; // FIX: Use default import
-import { useAuth } from '../../context/AuthContext';
-import { LoginCredentials, RegisterCredentials } from '../types';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import TextInput from '../common/TextInput'; // Using the dark-mode text input
+import Button from '../common/Button';
+import { LoginData, RegisterData } from '../../services/authService';
 
-interface EmailAuthFormProps {
+// --- DARK THEME CONSTANTS ---
+const DARK_COLORS = {
+  PRIMARY: '#BB86FC',    
+  TEXT: '#E0E0E0',       
+  SECONDARY_TEXT: '#B0B0B0', 
+};
+
+type Props = {
   isLogin: boolean;
-}
+  onSubmit: (data: LoginData | RegisterData) => void;
+  toggleAuthMode: () => void;
+};
 
-// FIX: Removed React.FC
-const EmailAuthForm = ({ isLogin }: EmailAuthFormProps) => {
+const EmailAuthForm = ({ isLogin, onSubmit, toggleAuthMode }: Props) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { signIn, signUp, isAuthenticating } = useAuth(); // Use correct function names from context
 
-  const handleSubmit = async () => {
-    if (!email || !password || (!isLogin && !name)) {
-      Alert.alert('Missing Fields', 'Please fill in all required fields.');
-      return;
-    }
-
-    try {
-      if (isLogin) {
-        const credentials: LoginCredentials = { email, password };
-        await signIn(credentials);
-        // Alert.alert('Success', 'Logged in successfully!'); // Success is handled by App.tsx navigating
-      } else {
-        const credentials: RegisterCredentials = { name, email, password };
-        await signUp(credentials);
-        // Alert.alert('Success', 'Account created and logged in!'); // Success is handled by App.tsx navigating
-      }
-    } catch (error: any) {
-      const errorMessage = error.message || 'Authentication failed. Check your credentials.';
-      Alert.alert('Error', errorMessage);
+  const handleSubmit = () => {
+    if (isLogin) {
+      onSubmit({ email, password });
+    } else {
+      onSubmit({ name, email, password });
     }
   };
 
   return (
-    <View style={styles.container}>
+    <View>
       {!isLogin && (
         <TextInput
-          placeholder="Full Name"
           value={name}
           onChangeText={setName}
-          autoCapitalize="words"
+          placeholder="Full Name"
+          icon="person-outline"
         />
       )}
       <TextInput
-        placeholder="Email"
         value={email}
         onChangeText={setEmail}
+        placeholder="Email"
         keyboardType="email-address"
         autoCapitalize="none"
+        icon="mail-outline"
       />
       <TextInput
-        placeholder="Password"
         value={password}
         onChangeText={setPassword}
+        placeholder="Password"
         secureTextEntry
+        icon="lock-closed-outline"
       />
 
-      <View style={{ marginTop: 16 }} />
       <Button
-        title={isAuthenticating ? 'Processing...' : isLogin ? 'SIGN IN' : 'SIGN UP'}
+        title={isLogin ? 'Sign In' : 'Sign Up'}
         onPress={handleSubmit}
-        disabled={isAuthenticating}
-        loading={isAuthenticating}
+        style={styles.submitButton}
       />
+      
+      <TouchableOpacity onPress={toggleAuthMode} style={styles.toggleButton}>
+        <Text style={styles.toggleText}>
+          {isLogin ? 'Need an account? Sign Up' : 'Have an account? Sign In'}
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    width: '100%',
+  submitButton: {
+    marginTop: 10,
+    backgroundColor: DARK_COLORS.PRIMARY,
+  },
+  toggleButton: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  toggleText: {
+    color: DARK_COLORS.SECONDARY_TEXT,
+    fontSize: 14,
   },
 });
 
-// Assuming this is exported as a named export
-export { EmailAuthForm };
+export default EmailAuthForm;

@@ -2,21 +2,10 @@ const { Report } = require('../models');
 const axios = require('axios');
 
 // --- AI Service Configuration ---
-// FIX: Replace 'http://localhost:5000' with your public Codespace URL for port 5000.
-// Find this in the "Ports" tab and make sure it's set to Public.
 const AI_SERVICE_URL = 'https://bookish-space-sniffle-ggrx9pq764vcv9vp-5000.app.github.dev';
 
 /**
- * Get the server's public URL from the request
- */
-const getServerBaseUrl = (req) => {
-  const host = req.get('x-forwarded-host') || req.get('host');
-  const protocol = req.get('x-forwarded-proto') || req.protocol;
-  return `${protocol}://${host}`;
-};
-
-/**
- * Create a new report (M-02)
+ * Create a new report (M-02) - IMAGE + TEXT
  * POST /api/reports
  */
 const createReport = async (req, res, next) => {
@@ -33,54 +22,39 @@ const createReport = async (req, res, next) => {
        return res.status(400).json({ error: 'Validation failed', message: 'Latitude, longitude, and description are required', code: 'MISSING_FIELDS' });
     }
 
-    // 1. Construct the public URL for the uploaded image
-    // 1. Get the public URL from Cloudinary
-// We no longer need serverBaseUrl; req.file.path is the full public URL
     const publicImageUrl = req.file.path; 
-
     console.log(`[Report] Image uploaded, public URL: ${publicImageUrl}`);
-        // 2. Call the AI Microservice
-    
-    // --- FIX 1: Corrected AI Endpoint URL ---
+        
     const aiEndpoint = `${AI_SERVICE_URL}/api/ai/classify/image`;
-    
     let aiResponse;
     const defaultAiResponse = { issueType: 'uncategorized', severityScore: 0, tags: [] };
 
     try {
       console.log(`[Report] Calling AI service at ${aiEndpoint}...`);
-
       const aiResult = await axios.post(aiEndpoint, {
         mediaUrl: publicImageUrl,
         description: description
       });
 
-      // --- FIX: Check for AI-level error in a 200 OK response ---
       if (aiResult.data && aiResult.data.error) {
-        console.error(`[Report] AI Service returned an error: ${aiResult.data.error}. Proceeding without AI data.`);
+        console.error(`[Report] AI Service returned an error: ${aiResult.data.error}.`);
         aiResponse = defaultAiResponse;
       } else if (aiResult.data) {
-        // This is the successful path
         aiResponse = aiResult.data;
       } else {
-        // This handles empty but non-error responses
-        console.warn('[Report] AI Service gave an empty response. Proceeding without AI data.');
+        console.warn('[Report] AI Service gave an empty response.');
         aiResponse = defaultAiResponse;
       }
-
       console.log('[Report] AI Service Response:', aiResponse);
-
     } catch (aiError) {
-      console.error(`[Report] AI Service Network Error: ${aiError.message}. Proceeding without AI data.`);
+      console.error(`[Report] AI Service Network Error: ${aiError.message}.`);
       aiResponse = defaultAiResponse;
     }
 
-    // --- FIX 3: Correctly parse AI response (camelCase) ---
     const score = aiResponse.severityScore || 0;
     let severity = 'low';
     let priority = 'low';
 
-    // Derive severity/priority from the AI's score
     if (score > 4) {
         severity = 'high';
         priority = 'high';
@@ -92,10 +66,13 @@ const createReport = async (req, res, next) => {
     // 3. Create and save the new report to MongoDB
     const newReport = new Report({
       userId,
-      issueType: aiResponse.issueType || 'uncategorized', // Use camelCase
+      issueType: aiResponse.issueType || 'uncategorized',
       description,
-      mediaUrl: req.file.path,
-      mediaType: 'image',
+      
+      // CHANGED: Use new model fields
+      imageUrl: publicImageUrl,
+      audioUrl: null, // No audio for this report type
+
       location: {
         type: 'Point',
         coordinates: [parseFloat(longitude), parseFloat(latitude)],
@@ -105,14 +82,13 @@ const createReport = async (req, res, next) => {
         zipCode: zipCode || ''
       },
       status: 'pending',
-      severity: severity, // Use derived severity
-      priority: priority, // Use derived priority
-      severityScore: aiResponse.severityScore || 0, // Use camelCase
+      severity: severity,
+      priority: priority,
+      severityScore: aiResponse.severityScore || 0,
       aiMetadata: aiResponse
     });
 
     await newReport.save();
-    
     console.log(`[Report] New report created: ${newReport._id} by user ${userId}`);
 
     res.status(201).json({
@@ -238,11 +214,20 @@ const updateReportStatus = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Create a new report (M-02) - AUDIO-ONLY or IMAGE+AUDIO
+ * POST /api/reports/audio
+ */
 const createReportWithAudio = async (req, res, next) => {
   try {
     const userId = req.userId;
     
-    if (!req.file) {
+    // CHANGED: Now using req.files from uploadCombo.fields
+    const imageFile = req.files.image ? req.files.image[0] : null;
+    const audioFile = req.files.audio ? req.files.audio[0] : null;
+
+    if (!audioFile) {
       return res.status(400).json({ error: 'Validation failed', message: 'Audio file is required', code: 'MISSING_AUDIO' });
     }
 
@@ -252,9 +237,14 @@ const createReportWithAudio = async (req, res, next) => {
        return res.status(400).json({ error: 'Validation failed', message: 'Latitude and longitude are required', code: 'MISSING_FIELDS' });
     }
 
-    // 1. Get the public URL from Cloudinary
-    const publicAudioUrl = req.file.path;
+    // 1. Get public URLs from Cloudinary
+    const publicAudioUrl = audioFile.path;
+    const publicImageUrl = imageFile ? imageFile.path : null; // Get image path if it exists
+    
     console.log(`[Report] Audio uploaded, public URL: ${publicAudioUrl}`);
+    if (publicImageUrl) {
+      console.log(`[Report] Image (combo) uploaded, public URL: ${publicImageUrl}`);
+    }
 
     // 2. Call the AI Microservice AUDIO endpoint
     const aiEndpoint = `${AI_SERVICE_URL}/api/ai/classify/audio`;
@@ -268,7 +258,6 @@ const createReportWithAudio = async (req, res, next) => {
         mediaUrl: publicAudioUrl,
         description: "" // Send empty description, AI will fill it
       }, {
-        // FIX: Increased timeout to 120 seconds (120000ms) for transcription
         timeout: 240000 
       });
 
@@ -278,7 +267,7 @@ const createReportWithAudio = async (req, res, next) => {
       } else if (aiResult.data) {
         aiResponse = aiResult.data;
       } else {
-        console.warn('[Report] AI Service gave an empty response. Proceeding without AI data.');
+        console.warn('[Report] AI Service gave an empty response.');
         aiResponse = defaultAiResponse;
       }
       console.log('[Report] AI Service Response:', aiResponse);
@@ -287,18 +276,6 @@ const createReportWithAudio = async (req, res, next) => {
       console.error(`[Report] AI Service Network Error: ${aiError.message}.`);
       aiResponse = defaultAiResponse;
     }
-
-    // AI will return a 'non-civic-issue' type if transcription is just noise
-    // 🎯 REMOVED LOGIC: If you want all reports submitted, comment out or remove this check:
-    /*
-    if (aiResponse.issueType === 'non-civic-issue') {
-      return res.status(422).json({
-        error: 'Invalid Issue',
-        message: 'Audio does not appear to describe a civic issue.',
-        code: 'NON_CIVIC_ISSUE'
-      });
-    }
-    */
 
     // 3. Derive severity/priority from the AI's score
     const score = aiResponse.severityScore || 0;
@@ -319,8 +296,11 @@ const createReportWithAudio = async (req, res, next) => {
       // Use transcription from AI as the description
       description: aiResponse.description || 'Audio report (transcription failed)',
       issueType: aiResponse.issueType || 'uncategorized',
-      mediaUrl: publicAudioUrl,
-      mediaType: 'audio', // Set media type
+      
+      // CHANGED: Use new model fields
+      imageUrl: publicImageUrl, // Will be NULL for audio-only, POPULATED for combo
+      audioUrl: publicAudioUrl,  // Will always be populated here
+
       location: {
         type: 'Point',
         coordinates: [parseFloat(longitude), parseFloat(latitude)],

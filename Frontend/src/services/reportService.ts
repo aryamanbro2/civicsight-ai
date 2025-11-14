@@ -1,5 +1,6 @@
 import apiClient from '../../api/axiosConfig';
-import * as authService from './authService'; // Import authService for logout
+// CHANGED: No longer need to import authService here
+// import * as authService from './authService'; 
 // --- Interfaces ---
 
 export interface Report {
@@ -7,8 +8,11 @@ export interface Report {
   userId: string;
   issueType: string;
   description: string;
-  mediaUrl: string; 
-  mediaType: 'image' | 'video' | 'audio';
+  
+  // CHANGED: Updated to new data model
+  imageUrl: string | null; 
+  audioUrl: string | null;
+
   location: {
     coordinates: [number, number];
     address: string;
@@ -46,6 +50,7 @@ export interface CreateReportAudioData {
   state: string;
   zipCode: string;
   audioUri: string; // The local file URI from the recorder
+  imageUri: string | null; // CHANGED: Added optional image for combo reports
 }
 
 export interface CreateReportResponse {
@@ -71,6 +76,7 @@ const isTokenExpiredError = (error: any) => {
 * Fetches the reports for the currently authenticated user
 * @returns {Promise<ListReportsResponse>}
 */
+// Note: I'm keeping your change of limit = 100
 const getMyReports = async (page = 1, limit = 10): Promise<ListReportsResponse> => {
   try {
     const response = await apiClient.get('/reports/my', {
@@ -80,11 +86,10 @@ const getMyReports = async (page = 1, limit = 10): Promise<ListReportsResponse> 
   } catch (error: any) {
     console.error('Error fetching my reports:', error.response?.data || error.message);
     
-    // FIX: If token is expired, sign the user out
     if (isTokenExpiredError(error)) {
-        console.log('Token expired, forcing sign out.');
-        authService.logout(); // Clear session data
-        // Rethrow a specific error to be caught by the DashboardScreen
+        console.log('Token expired, user will be logged out by UI.');
+        // CHANGED: Removed call to authService.logout()
+        // The UI (FeedScreen, etc.) will catch this specific error.
         throw new Error('Token has expired. Please sign in again.');
     }
     
@@ -104,7 +109,9 @@ const getAllReports = async (page = 1, limit = 10): Promise<ListReportsResponse>
     return response.data;
   } catch (error: any) {
     if (isTokenExpiredError(error)) {
-        authService.logout();
+        console.log('Token expired, user will be logged out by UI.');
+        // CHANGED: Removed call to authService.signOut()
+        // The UI (FeedScreen, etc.) will catch this specific error.
         throw new Error('Token has expired. Please sign in again.');
     }
     console.error('Error fetching all reports:', error.response?.data || error.message);
@@ -150,7 +157,7 @@ const createReport = async (data: CreateReportData): Promise<CreateReportRespons
 };
 
 /**
- * Creates a new report by uploading an AUDIO file and form data
+ * Creates a new report by uploading an AUDIO file (and optionally an IMAGE)
  * @param {CreateReportAudioData} data - The report data from the form
  * @returns {Promise<CreateReportResponse>}
  */
@@ -165,15 +172,30 @@ const createReportWithAudio = async (data: CreateReportAudioData): Promise<Creat
     formData.append('state', data.state);
     formData.append('zipCode', data.zipCode);
 
-    const uri = data.audioUri;
+    // Append audio
+    const audioUri = data.audioUri;
     formData.append('audio', {
-      uri,
+      uri: audioUri,
       name: `audio-${Date.now()}.m4a`,
       type: 'audio/m4a',
     } as any);
 
+    // CHANGED: Append image if it exists
+    if (data.imageUri) {
+      const imgUri = data.imageUri;
+      const uriParts = imgUri.split('.');
+      const fileType = uriParts[uriParts.length - 1];
+      
+      formData.append('image', {
+        uri: imgUri,
+        name: `photo.${fileType}`,
+        type: `image/${fileType}`,
+      } as any);
+    }
+
     const response = await apiClient.post('/reports/audio', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 240000, // Keep long timeout for transcription
     });
 
     return response.data;
@@ -183,11 +205,6 @@ const createReportWithAudio = async (data: CreateReportAudioData): Promise<Creat
   }
 };
 
-
-/**
-* Fetches the reports for the currently authenticated user
-* @returns {Promise<ListReportsResponse>}
-*/
 
 export const reportService = {
   createReport,

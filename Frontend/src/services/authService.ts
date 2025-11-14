@@ -1,82 +1,60 @@
-// FIX: Corrected path
-import apiClient from '../../api/axiosConfig.js';
-import * as SecureStore from 'expo-secure-store';
+import apiClient from '../../api/axiosConfig';
 
-// FIX: Corrected path
-import { User, LoginCredentials, RegisterCredentials } from '../components/types';
-// FIX: Corrected path
-import { config } from '../config';
+// --- Interfaces ---
 
-const TOKEN_KEY = config.AUTH_TOKEN_KEY;
-const USER_KEY = config.USER_DATA_KEY;
+// CHANGED: Added 'export'
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+}
 
-// --- Token and User Storage ---
-const saveAuthData = async (token: string, user: User) => {
-  await SecureStore.setItemAsync(TOKEN_KEY, token);
-  await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
-};
+// CHANGED: Added 'export'
+export interface LoginData {
+  email: string;
+  password: string;
+}
 
-const clearAuthData = async () => {
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
-  await SecureStore.deleteItemAsync(USER_KEY);
-};
+// CHANGED: Added 'export'
+export interface RegisterData extends LoginData {
+  name: string;
+}
 
-export const getStoredAuthData = async (): Promise<{ token: string | null; user: User | null }> => {
-  const token = await SecureStore.getItemAsync(TOKEN_KEY);
-  const userJson = await SecureStore.getItemAsync(USER_KEY);
-  
-  let user: User | null = null;
-  if (userJson) {
-    try {
-      user = JSON.parse(userJson);
-    } catch (e) {
-      console.error('Failed to parse stored user data:', e);
-      await clearAuthData(); // Clear corrupted data
-    }
-  }
+interface AuthResponse {
+  message: string;
+  success: boolean;
+  token: string;
+  user: User;
+}
 
-  return { token, user };
-};
-
-// --- API Functions ---
-export const login = async (credentials: LoginCredentials): Promise<{ user: User; token: string }> => {
+/**
+ * Logs in a user
+ * @param {LoginData} data - { email, password }
+ * @returns {Promise<AuthResponse>}
+ */
+const login = async (data: LoginData): Promise<AuthResponse> => {
   try {
-    // This route is correct: baseURL (/api) + /auth/login
-    const response = await apiClient.post('/auth/login', credentials);
-    const { token, user } = response.data;
-    
-    if (token && user) {
-      await saveAuthData(token, user);
-      return { user, token };
-    }
-    throw new Error('Invalid response format from server.');
-
+    const response = await apiClient.post('/auth/login', data);
+    return response.data;
   } catch (error: any) {
-    console.error('Login failed:', error.response?.data || error.message);
-    throw new Error(error.response?.data?.message || 'Login failed due to network or server error.');
+    console.error('Login service error:', error.response?.data || error.message);
+    throw new Error(error.response?.data?.message || 'Failed to log in');
   }
 };
 
-export const register = async (credentials: RegisterCredentials): Promise<{ user: User; token: string }> => {
+/**
+ * Registers a new user
+ * @param {RegisterData} data - { name, email, password }
+ * @returns {Promise<AuthResponse>}
+ */
+const register = async (data: RegisterData): Promise<AuthResponse> => {
   try {
-    // FIX: Changed '/auth/register' to '/auth/signup'
-    // This now matches the backend route: baseURL (/api) + /auth/signup
-    const response = await apiClient.post('/auth/signup', credentials);
-    const { token, user } = response.data;
-    
-    if (token && user) {
-      await saveAuthData(token, user);
-      return { user, token };
-    }
-    throw new Error('Invalid response format from server.');
-    
+    const response = await apiClient.post('/auth/register', data);
+    return response.data;
   } catch (error: any) {
-    console.error('Registration failed:', error.response?.data || error.message);
-    // FIX: Provide the specific error message from the backend
-    throw new Error(error.response?.data?.message || 'Registration failed.');
+    console.error('Register service error:', error.response?.data || error.message);
+    throw new Error(error.response?.data?.message || 'Failed to register');
   }
 };
 
-export const logout = async (): Promise<void> => {
-  await clearAuthData();
-};
+export { login, register };

@@ -1,118 +1,101 @@
 import React, { useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-} from 'react-native';
-// FIX: Import SafeAreaView from 'react-native-safe-area-context'
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { FontAwesome } from '@expo/vector-icons';
-import { EmailAuthForm } from '../components/auth/EmailAuthForm';
-import SocialAuthButton from '../components/auth/SocialAuthButton';
+import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
 import Logo from '../components/common/Logo';
+import EmailAuthForm from '../components/auth/EmailAuthForm';
+// import SocialAuthButton from '../components/auth/SocialAuthButton'; // No longer needed
+import { useAuth } from '../context/AuthContext';
+import { LoginData, RegisterData } from '../services/authService';
+
+// --- DARK THEME CONSTANTS ---
+const DARK_COLORS = {
+  BACKGROUND: '#121212', 
+  CARD: '#1E1E1E',       
+  PRIMARY: '#BB86FC',    
+  ACCENT: '#03DAC6',     
+  TEXT: '#E0E0E0',       
+  SECONDARY_TEXT: '#B0B0B0', 
+  BORDER: '#333333',     
+  DANGER: '#CF6679',
+};
 
 const AuthScreen = () => {
   const [isLogin, setIsLogin] = useState(true);
-  const toggleMode = () => setIsLogin((prev) => !prev);
+  const [isLoading, setIsLoading] = useState(false);
+  const { signIn, register } = useAuth();
 
-  const handleSocialLogin = (provider: string) => {
-    Alert.alert('Not Implemented', `${provider} login is not set up yet.`);
+  const handleAuth = async (data: LoginData | RegisterData) => {
+    setIsLoading(true);
+    try {
+      if (isLogin) {
+        await signIn(data.email, data.password);
+      } else {
+        // We know 'name' exists on RegisterData
+        const regData = data as RegisterData;
+        await register(regData.name, regData.email, regData.password);
+      }
+      // On success, the AuthContext will automatically navigate away
+    } catch (error: any) {
+      setIsLoading(false);
+      Alert.alert(
+        isLogin ? "Login Failed" : "Registration Failed",
+        error.message || "An unknown error occurred."
+      );
+    }
   };
 
   return (
-    // FIX: This SafeAreaView is now from the correct package
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <Logo />
-          <Text style={styles.title}>{isLogin ? 'Welcome Back!' : 'Join CivicSight AI'}</Text>
-        </View>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        <Logo />
+        <Text style={styles.title}>{isLogin ? 'Welcome Back' : 'Create Account'}</Text>
+        <Text style={styles.subtitle}>Sign in to report and track civic issues</Text>
+        
+        {isLoading ? (
+          <ActivityIndicator size="large" color={DARK_COLORS.PRIMARY} style={styles.loader} />
+        ) : (
+          <>
+            <EmailAuthForm
+              isLogin={isLogin}
+              onSubmit={handleAuth}
+              toggleAuthMode={() => setIsLogin(!isLogin)}
+            />
 
-        <View style={styles.formContainer}>
-          <EmailAuthForm isLogin={isLogin} />
-
-          <TouchableOpacity style={styles.toggleButton} onPress={toggleMode}>
-            <Text style={styles.toggleButtonText}>
-              {isLogin ? "Don't have an account? Sign Up" : 'Already have an account? Sign In'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.dividerContainer}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>OR</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        <SocialAuthButton
-          provider="Google"
-          text="Continue with Google"
-          icon={<FontAwesome name="google" size={20} color="#000" />}
-          onPress={() => handleSocialLogin('Google')}
-        />
-        <SocialAuthButton
-          provider="Facebook"
-          text="Continue with Facebook"
-          icon={<FontAwesome name="facebook" size={20} color="#000" />}
-          onPress={() => handleSocialLogin('Facebook')}
-        />
-      </ScrollView>
+            {/* REMOVED: Divider and SocialAuthButton */}
+          </>
+        )}
+      </View
+>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
   container: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 40,
+    flex: 1,
+    backgroundColor: DARK_COLORS.BACKGROUND,
   },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  loader: {
+    marginVertical: 40,
   },
   title: {
     fontSize: 28,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginTop: 24,
+    fontWeight: '800',
+    color: DARK_COLORS.TEXT,
     textAlign: 'center',
+    marginTop: 20,
   },
-  formContainer: {
-    marginBottom: 24,
-  },
-  toggleButton: {
-    marginTop: 16,
-  },
-  toggleButtonText: {
-    fontSize: 14,
-    color: '#8B5CF6',
-    fontWeight: '600',
+  subtitle: {
+    fontSize: 16,
+    color: DARK_COLORS.SECONDARY_TEXT,
     textAlign: 'center',
+    marginBottom: 30,
   },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E5E7EB',
-  },
-  dividerText: {
-    marginHorizontal: 16,
-    fontSize: 14,
-    color: '#6B7280',
-  },
+  // REMOVED: Divider styles
 });
 
 export default AuthScreen;

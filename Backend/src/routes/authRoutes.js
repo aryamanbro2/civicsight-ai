@@ -1,48 +1,20 @@
 /**
  * Auth Routes (R-01)
- * Defines API endpoints for user authentication (signup, login, profile).
+ * Defines API endpoints for user authentication (register, login).
  */
 
 const express = require('express');
-// FIX: Removed imports for verifyOTP and resendOTP
-const { signup, login, getProfile, updateProfile, getAllUsers } = require('../controllers/authController');
-const { requireAuth } = require('../middleware/auth');
-
+const { register, login } = require('../controllers/authController'); // REMOVED: googleLogin
 const router = express.Router();
 
-// --- Public Auth Routes ---
-
-// POST /api/auth/signup
+// POST /api/auth/register (B-01)
 // Register a new user
-router.post('/signup', signup);
+router.post('/register', register);
 
-// POST /api/auth/login
-// Log in a user (originally with phone, now email/pass)
+// POST /api/auth/login (B-01)
+// Log in a user
 router.post('/login', login);
 
-// POST /api/auth/verify-otp
-// Verify the OTP sent to the user
-// FIX: Commented out, as this logic was removed from the controller
-// router.post('/verify-otp', verifyOTP);
-
-// POST /api/auth/resend-otp
-// Resend the OTP to the user
-// FIX: Commented out, as this logic was removed from the controller
-// router.post('/resend-otp', resendOTP);
-
-// --- Protected Auth Routes ---
-// These routes require a valid JWT token (via requireAuth middleware)
-
-// GET /api/auth/profile
-// Get the authenticated user's profile
-router.get('/profile', requireAuth, getProfile);
-
-// PUT /api/auth/profile
-// Update the authenticated user's profile
-router.put('/profile', requireAuth, updateProfile);
-
-// GET /api/auth/users
-// Get a list of all users (for admin/testing)
-router.get('/users', requireAuth, getAllUsers);
+// REMOVED: /api/auth/google route
 
 module.exports = router;

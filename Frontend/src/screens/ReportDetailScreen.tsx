@@ -1,8 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, Dimensions, SafeAreaView } from 'react-native';
+// CHANGED: Import SafeAreaView from 'react-native-safe-area-context'
+import { View, Text, StyleSheet, ScrollView, Image, Dimensions } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { Report } from '../services/reportService'; // Assuming Report interface is available
+import { Report } from '../services/reportService'; 
 
 // Get screen width for full image display
 const { width } = Dimensions.get('window');
@@ -55,20 +57,38 @@ const ReportDetailScreen = () => {
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView}>
         
-        {/* Full Image/Media Display */}
-        {report.mediaType === 'image' && report.mediaUrl ? (
+        {/* Image Display (if it exists) */}
+        {report.imageUrl && (
           <Image 
-            source={{ uri: report.mediaUrl }} 
+            source={{ uri: report.imageUrl }} 
             style={styles.fullImage} 
             resizeMode="cover"
           />
-        ) : report.mediaType === 'audio' ? (
-            <View style={styles.audioPlaceholder}>
+        )}
+
+        {/* Audio Display (if it exists) */}
+        {report.audioUrl && (
+            <View style={[
+              styles.audioPlaceholder, 
+              report.imageUrl ? styles.audioWithImage : styles.audioOnly
+            ]}>
                 <Ionicons name="mic-circle-outline" size={80} color={DARK_COLORS.PRIMARY} />
                 <Text style={styles.audioText}>Audio Report Playback</Text>
-                <Text style={styles.audioSubText}>Media URL: {report.mediaUrl.substring(0, 40)}...</Text>
+                <Text style={styles.audioSubText}>
+                  {/* TODO: Implement audio playback on press */}
+                  Media URL: {report.audioUrl.substring(0, 40)}...
+                </Text>
             </View>
-        ) : null}
+        )}
+
+        {/* Fallback (if neither exists) */}
+        {!report.imageUrl && !report.audioUrl && (
+           <View style={[styles.audioPlaceholder, styles.audioOnly]}>
+              <Ionicons name="alert-circle-outline" size={80} color={DARK_COLORS.SECONDARY_TEXT} />
+              <Text style={styles.audioText}>No Media Found</Text>
+           </View>
+        )}
+
 
         <View style={styles.content}>
           <Text style={styles.issueType}>{report.issueType.toUpperCase()}</Text>
@@ -96,7 +116,6 @@ const ReportDetailScreen = () => {
             <Text style={styles.subDetailText}>
               Coordinates: {report.location.coordinates[1]}, {report.location.coordinates[0]}
             </Text>
-            {/* FIX: Accessing correct location properties */}
             <Text style={styles.subDetailText}>
               {report.location.city}, {report.location.state} {report.location.zipCode}
             </Text>
@@ -106,7 +125,6 @@ const ReportDetailScreen = () => {
           <View style={styles.detailCard}>
             <Text style={styles.detailTitle}><Ionicons name="information-circle-outline" size={18} color={DARK_COLORS.TEXT} /> AI Metadata</Text>
             <Text style={styles.subDetailText}>Reported: {new Date(report.createdAt).toLocaleDateString()}</Text>
-            {/* FIX: Accessing correct severityScore and aiMetadata properties */}
             <Text style={styles.subDetailText}>Severity Score: {report.severityScore}</Text>
             <Text style={styles.subDetailText}>Tags: {report.aiMetadata?.tags?.join(', ') || 'N/A'}</Text>
           </View>
@@ -131,12 +149,22 @@ const styles = StyleSheet.create({
   },
   audioPlaceholder: {
     width: width,
-    height: width * 0.6,
     backgroundColor: DARK_COLORS.CARD,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  // Style for Audio-Only reports
+  audioOnly: {
+    height: width * 0.6,
     borderBottomWidth: 1,
     borderBottomColor: DARK_COLORS.BORDER,
+  },
+  // Style for Audio when an Image is also present (stacks below)
+  audioWithImage: {
+    height: 'auto', // Auto height
+    paddingVertical: 30, // Give it padding
+    borderTopWidth: 1, // Add separator
+    borderTopColor: DARK_COLORS.BORDER,
   },
   audioText: {
     fontSize: 20,

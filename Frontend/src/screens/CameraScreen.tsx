@@ -1,235 +1,185 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  Dimensions,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
+// CHANGED: We don't need MediaType from here
+import * as ImagePicker from 'expo-image-picker';
 import { Camera, CameraView } from 'expo-camera';
-import * as Location from 'expo-location';
-import { FontAwesome5, MaterialIcons, Ionicons } from '@expo/vector-icons';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../../App'; // Import types from App.tsx
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-// This is the full location data we need
-export interface CapturedLocation {
-  coords: Location.LocationObjectCoords;
-  address: Location.LocationGeocodedAddress | null;
-}
+// --- Types ---
+type RootStackParamList = {
+  IssueForm: { imageUri: string };
+};
+type CameraNavigationProp = NativeStackNavigationProp<RootStackParamList, 'IssueForm'>;
 
-// --- Type definitions for navigation ---
-type CameraScreenNavigationProp = StackNavigationProp<
-  RootStackParamList,
-  'Camera'
->;
+// --- Constants ---
+const DARK_COLORS = {
+  BACKGROUND: '#000000', 
+  TEXT: '#FFFFFF',       
+  PRIMARY: '#BB86FC',    
+  SECONDARY_ICON: '#B0B0B0',
+};
 
-interface CameraScreenProps {
-  navigation: CameraScreenNavigationProp;
-  // --- REMOVED onCapture and onClose props ---
-}
-
-const { width } = Dimensions.get('window');
-const PRIMARY_COLOR = '#007AFF';
-const DANGER_COLOR = '#FF3B30';
-
-const CameraScreen = ({ navigation }: CameraScreenProps) => {
+const CameraScreen = () => {
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const [type, setType] = useState('back'); 
   const cameraRef = useRef<CameraView | null>(null);
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [isCapturing, setIsCapturing] = useState<boolean>(false);
-  const [facing, setFacing] = useState<'front' | 'back'>('back');
-  const [location, setLocation] = useState<CapturedLocation | null>(null);
-  const [locationStatus, setLocationStatus] = useState('Fetching...');
+  const navigation = useNavigation<CameraNavigationProp>();
 
+  // --- 1. Request Permissions ---
   useEffect(() => {
-    // ... (Permission request logic is unchanged) ...
-     const requestPermissions = async () => {
+    (async () => {
       const { status: cameraStatus } = await Camera.requestCameraPermissionsAsync();
-      const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
-      const allGranted = cameraStatus === 'granted' && locationStatus === 'granted';
+      setHasCameraPermission(cameraStatus === 'granted');
 
-      if (!allGranted) {
-        Alert.alert('Permissions Required', 'Camera and location permissions are essential.');
-        setHasPermission(false);
-        return;
+      if (Platform.OS !== 'web') {
+        const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (libraryStatus !== 'granted') {
+          Alert.alert('Permission needed', 'Sorry, we need camera roll permissions to allow uploads.');
+        }
       }
-      setHasPermission(true);
-
-      try {
-        setLocationStatus('Fetching location...');
-        const currentLocation = await Location.getCurrentPositionAsync({});
-        
-        setLocationStatus('Fetching address...');
-        const geocoded = await Location.reverseGeocodeAsync({
-          latitude: currentLocation.coords.latitude,
-          longitude: currentLocation.coords.longitude,
-        });
-
-        const capturedLocation: CapturedLocation = {
-          coords: currentLocation.coords,
-          address: geocoded[0] || null,
-        };
-        
-        setLocation(capturedLocation);
-        setLocationStatus('Location Ready');
-
-      } catch (error) {
-        console.error('Error getting location:', error);
-        setLocationStatus('Location Error');
-        Alert.alert('Location Error', 'Could not fetch location or address. Using null.');
-      }
-    };
-
-    requestPermissions();
+    })();
   }, []);
 
+  // --- 2. Take Picture Logic ---
   const takePicture = async () => {
     if (cameraRef.current) {
-      setIsCapturing(true);
       try {
         const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.5,
-          exif: true,
+          quality: 0.7,
         });
-
-        if (photo && photo.uri) {
-          // --- FIX: Navigate to IssueForm with the data ---
-          navigation.navigate('IssueForm', {
-            imageUri: photo.uri,
-            location: location,
-          });
+        if (photo) {
+          navigation.navigate('IssueForm', { imageUri: photo.uri });
         } else {
-          throw new Error('Photo capture returned null or no URI');
+          Alert.alert('Error', 'Could not capture picture.');
         }
       } catch (error) {
-        console.error('Photo capture failed:', error);
-        Alert.alert('Error', 'Failed to capture photo.');
-      } finally {
-        setIsCapturing(false);
+        console.error('Failed to take picture:', error);
+        Alert.alert('Error', 'Could not take picture.');
       }
     }
   };
 
-  if (hasPermission === null || hasPermission === false) {
-    // ... (Loading/Permission view is unchanged) ...
+  // --- 3. Pick Image Logic ---
+  const pickImage = async () => {
+    try {
+      let result = await ImagePicker.launchImageLibraryAsync({
+        // CRITICAL FIX: The prop now takes an array of strings, not an enum.
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.7,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        navigation.navigate('IssueForm', { imageUri: result.assets[0].uri });
+      }
+    } catch (error) {
+        console.error('Failed to pick image:', error);
+        Alert.alert('Error', 'Could not load image from gallery.');
+    }
+  };
+
+  // --- 4. Flip Camera Logic ---
+  const flipCamera = () => {
+    setType(current => (current === 'back' ? 'front' : 'back'));
+  };
+
+  // --- 5. Render Logic ---
+  if (hasCameraPermission === null) {
+    return <View style={styles.container} />; // Loading state
+  }
+  if (hasCameraPermission === false) {
+    return (
+        <View style={styles.container}>
+            <Text style={styles.permissionText}>No access to camera</Text>
+        </View>
+    );
   }
 
   return (
     <View style={styles.container}>
-      <CameraView ref={cameraRef} style={styles.camera} facing={facing} ratio="16:9" />
+      <CameraView 
+        style={StyleSheet.absoluteFillObject} 
+        facing={type as any} 
+        ref={cameraRef} 
+      />
+        
+      <View style={styles.topControls}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Ionicons name="close" size={35} color={DARK_COLORS.TEXT} />
+        </TouchableOpacity>
+      </View>
 
-      {isCapturing && (
-        <View style={styles.overlay}>
-          <ActivityIndicator size="large" color="#fff" />
-          <Text style={styles.overlayText}>Processing Photo...</Text>
-        </View>
-      )}
-
-      {/* --- FIX: Close button uses navigation.goBack() --- */}
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
-        <Ionicons name="close" size={30} color="white" />
-      </TouchableOpacity>
-
-      <View style={styles.controlsContainer}>
-        {/* ... (Controls are unchanged) ... */}
-         <View style={styles.controlItem}>
-          <MaterialIcons name="location-on" size={24} color={location ? '#28A745' : DANGER_COLOR} />
-          <Text style={styles.locationText}>{locationStatus}</Text>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.captureButton, isCapturing && { backgroundColor: '#ccc' }]}
-          onPress={takePicture}
-          disabled={isCapturing || !location}
-        >
-          <FontAwesome5 name="camera" size={30} color="#fff" />
+      <View style={styles.bottomControls}>
+        <TouchableOpacity onPress={pickImage} style={styles.iconButton}>
+          <Ionicons name="image-outline" size={30} color={DARK_COLORS.SECONDARY_ICON} />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.controlItem}
-          onPress={() => {
-            setFacing(facing === 'back' ? 'front' : 'back');
-          }}>
-          <MaterialIcons name="flip-camera-ios" size={24} color="white" />
-          <Text style={styles.locationText}>Flip</Text>
+        <TouchableOpacity onPress={takePicture} style={styles.shutterButton}>
+          <View style={styles.shutterButtonInner} />
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={flipCamera} style={styles.iconButton}>
+          <Ionicons name="camera-reverse-outline" size={30} color={DARK_COLORS.SECONDARY_ICON} />
         </TouchableOpacity>
       </View>
     </View>
   );
 };
 
-// ... (styles remain the same) ...
+// --- STYLES ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: DARK_COLORS.BACKGROUND,
+    justifyContent: 'space-between',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
+  permissionText: {
+    color: DARK_COLORS.TEXT,
+    fontSize: 18,
+    textAlign: 'center',
+    marginTop: '50%',
   },
-  loadingText: {
-    marginTop: 10,
-    color: PRIMARY_COLOR,
+  topControls: {
+    paddingTop: (Platform.OS === 'android' ? 20 : 50),
+    paddingHorizontal: 20,
+    backgroundColor: 'transparent',
+    zIndex: 1,
   },
-  camera: {
-    flex: 1, 
-    justifyContent: 'flex-end',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject, 
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10, 
-  },
-  overlayText: {
-    color: '#fff',
-    marginTop: 10,
-  },
-  closeButton: {
-    position: 'absolute', 
-    top: 50,
-    left: 20,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 20, 
-  },
-  controlsContainer: {
-    height: 120,
+  bottomControls: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    backgroundColor: '#000',
-    paddingBottom: 20,
+    paddingBottom: (Platform.OS === 'android' ? 20 : 40),
+    paddingTop: 20,
+    backgroundColor: 'rgba(0,0,0,0.4)', // Semi-transparent bar
+    zIndex: 1,
   },
-  controlItem: {
-    alignItems: 'center',
-  },
-  captureButton: {
+  shutterButton: {
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: PRIMARY_COLOR,
+    backgroundColor: DARK_COLORS.TEXT,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 4,
-    borderColor: 'white',
+    borderColor: DARK_COLORS.BACKGROUND,
   },
-  locationText: {
-    fontSize: 12,
-    color: 'white',
-    marginTop: 4,
+  shutterButtonInner: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: DARK_COLORS.TEXT,
+    borderWidth: 2,
+    borderColor: DARK_COLORS.BACKGROUND,
+  },
+  iconButton: {
+    width: 50,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
-
 
 export default CameraScreen;

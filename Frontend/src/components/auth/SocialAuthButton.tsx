@@ -1,38 +1,41 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
-import { SocialAuthButtonProps } from '../types';
+import { Ionicons } from '@expo/vector-icons';
 
-// FIX: Removed React.FC
-const SocialAuthButton = ({ provider, onPress, icon, text }: SocialAuthButtonProps) => {
+type Props = {
+  provider: 'google' | 'apple';
+  text: string;
+  onPress: () => void;
+};
+
+const SocialAuthButton = ({ provider, text, onPress }: Props) => {
+  const iconName = provider === 'google' ? 'logo-google' : 'logo-apple';
+  
   return (
-    <TouchableOpacity style={styles.button} onPress={onPress} activeOpacity={0.8}>
-      <View style={styles.content}>
-        {icon}
-        <Text style={styles.text}>{text}</Text>
-      </View>
+    <TouchableOpacity style={styles.button} onPress={onPress}>
+      <Ionicons name={iconName} size={22} color="#000" style={styles.icon} />
+      <Text style={styles.text}>{text}</Text>
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
   button: {
-    width: '100%',
-    height: 56,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  content: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF', // White button for high contrast
+    borderRadius: 8,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  icon: {
+    marginRight: 10,
   },
   text: {
+    color: '#000000', // Black text
     fontSize: 16,
-    color: '#000000',
-    fontWeight: '500',
-    marginLeft: 12, // Added more margin
+    fontWeight: '600',
   },
 });
 

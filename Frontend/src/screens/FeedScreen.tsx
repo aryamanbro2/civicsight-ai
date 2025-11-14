@@ -13,9 +13,9 @@ import {
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'; 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getMyReports, Report } from '../services/reportService';
+import { getAllReports, Report } from '../services/reportService';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../context/AuthContext'; // --- NEW IMPORT ---
+import { useAuth } from '../context/AuthContext'; 
 
 // --- CONSTANTS ---
 const DARK_COLORS = {
@@ -128,30 +128,30 @@ type RootStackParamList = {
   ReportDetail: { report: Report }; 
   CameraScreen: undefined;
 };
-type DashboardNavigationProp = NativeStackNavigationProp<RootStackParamList, 'AppTabs'>;
+type FeedNavigationProp = NativeStackNavigationProp<RootStackParamList, 'AppTabs'>;
 
 
-// --- DashboardScreen Component (My Reports) ---
-const DashboardScreen = () => {
-  const navigation = useNavigation<DashboardNavigationProp>(); 
+// --- FeedScreen Component ---
+const FeedScreen = () => {
+  const navigation = useNavigation<FeedNavigationProp>(); 
   const [latestReport, setLatestReport] = useState<Report | null>(null);
   const [otherReports, setOtherReports] = useState<Report[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
-  // --- CRITICAL FIX: Use the loading state from AuthContext ---
+  // CRITICAL FIX: Use the loading state from AuthContext
   const { isLoading: isAuthLoading } = useAuth();
   
   const insets = useSafeAreaInsets();
   
-  const fetchMyReports = useCallback(async () => {
+  const fetchAllReports = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const response = await getMyReports();
+      const response = await getAllReports();
       setLatestReport(response.reports[0] || null);
       setOtherReports(response.reports.slice(1));
 
     } catch (error: any) {
-      console.error('Error loading reports:', error.message); 
+      console.error('Error loading all reports:', error.message); 
       if (error.message === 'Token has expired. Please sign in again.') {
         Alert.alert(
           'Session Expired',
@@ -165,20 +165,20 @@ const DashboardScreen = () => {
 
   const renderEmptyList = () => (
     <View style={styles.emptyContainer}>
-      <Ionicons name="document-text-outline" size={50} color={DARK_COLORS.SECONDARY_TEXT} />
-      <Text style={styles.emptyText}>No issues reported yet.</Text>
-      <Text style={styles.emptyTextSub}>Use the '+' button to file your first AI-powered report!</Text>
+      <Ionicons name="earth-outline" size={50} color={DARK_COLORS.SECONDARY_TEXT} />
+      <Text style={styles.emptyText}>No community reports found.</Text>
+      <Text style={styles.emptyTextSub}>Be the first to report an issue in your area!</Text>
     </View>
   );
 
   useFocusEffect(
     useCallback(() => {
-      // --- CRITICAL FIX: Do not fetch if auth is still loading/logging in ---
+      // CRITICAL FIX: Do not fetch if auth is still loading/logging in
       if (!isAuthLoading) {
-        fetchMyReports();
+        fetchAllReports();
       }
       return () => {};
-    }, [isAuthLoading, fetchMyReports]) // Run effect when isAuthLoading changes
+    }, [isAuthLoading, fetchAllReports]) // Run effect when isAuthLoading changes
   );
 
   const handleCardPress = (report: Report) => {
@@ -199,22 +199,23 @@ const DashboardScreen = () => {
     </>
   );
 
-  // CHANGED: Use isAuthLoading for the main loading spinner
+  // Use isAuthLoading for the main loading spinner
   if (isAuthLoading && !isRefreshing) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={DARK_COLORS.PRIMARY} />
-        <Text style={styles.loadingText}>Fetching reports...</Text>
+        <Text style={styles.loadingText}>Fetching community feed...</Text>
       </View>
     );
   }
 
+  // This is the part you are seeing, because the fetch fails
   if (!latestReport && otherReports.length === 0) {
     return (
         <View style={[styles.outerContainer, { paddingTop: insets.top }]}>
            <View style={styles.headerContainer}>
-            <Text style={styles.headerTitle}>My Reports</Text>
-            <Ionicons name="person-circle-outline" size={32} color={DARK_COLORS.PRIMARY} />
+            <Text style={styles.headerTitle}>Community Feed</Text>
+            <Ionicons name="earth-outline" size={32} color={DARK_COLORS.PRIMARY} />
           </View>
           {renderEmptyList()}
         </View>
@@ -225,8 +226,8 @@ const DashboardScreen = () => {
     <View style={[styles.outerContainer, { paddingTop: insets.top }]}> 
       <View style={styles.innerContentWrapper}> 
         <View style={styles.headerContainer}>
-          <Text style={styles.headerTitle}>My Reports</Text>
-          <Ionicons name="person-circle-outline" size={32} color={DARK_COLORS.PRIMARY} />
+          <Text style={styles.headerTitle}>Community Feed</Text>
+          <Ionicons name="earth-outline" size={32} color={DARK_COLORS.PRIMARY} />
         </View>
         
         <FlatList
@@ -234,7 +235,7 @@ const DashboardScreen = () => {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <ReportCard report={item} onPress={() => handleCardPress(item)} />}
           ListHeaderComponent={renderHeader}
-          onRefresh={() => fetchMyReports()} 
+          onRefresh={() => fetchAllReports()} 
           refreshing={isRefreshing}
           showsVerticalScrollIndicator={false}
           scrollIndicatorInsets={{ bottom: TAB_BAR_HEIGHT_ESTIMATE + insets.bottom }}
@@ -438,4 +439,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default DashboardScreen;
+export default FeedScreen;

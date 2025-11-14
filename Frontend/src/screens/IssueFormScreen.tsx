@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Alert, ScrollView, Image, Platform, ActivityIndicator } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { Audio } from 'expo-av';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+// CHANGED: Import Audio from 'expo-audio'
+import { Audio } from 'expo-audio';
 import Button from '../components/common/Button'; 
 import TextInput from '../components/common/TextInput'; 
 import { 
@@ -16,16 +18,23 @@ import * as ImagePicker from 'expo-image-picker';
 
 
 // --- DEFINE TYPES ---
+
+// For the Route prop
 type IssueFormRouteParams = {
-  imageUri?: string; // Passed from Camera or Gallery Upload
-  audioMode?: boolean; // Passed from Voice Note option on Dashboard
+  imageUri?: string; 
+  audioMode?: boolean; 
 };
 
-type RootStackParamList = {
+// For the Navigation prop (based on App.tsx)
+type AppStackParamList = {
+  AppTabs: { screen: string }; 
+  CameraScreen: undefined;
   IssueForm: IssueFormRouteParams;
+  ReportDetail: { report: any };
 };
 
-type IssueFormScreenRouteProp = RouteProp<RootStackParamList, 'IssueForm'>;
+type IssueFormNavigationProp = NativeStackNavigationProp<AppStackParamList, 'IssueForm'>;
+type IssueFormScreenRouteProp = RouteProp<AppStackParamList, 'IssueForm'>;
 
 // --- UI CONSTANTS (Dark Theme) ---
 const COLORS = {
@@ -42,13 +51,14 @@ const FONT = Platform.select({ ios: 'System', android: 'Roboto', default: 'Syste
 
 
 const IssueFormScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<IssueFormNavigationProp>();
   const route = useRoute<IssueFormScreenRouteProp>();
   
   // Media state
   const [imageUri, setImageUri] = useState(route.params?.imageUri || null);
   
   // Audio State
+  // CHANGED: Recording type is now from 'expo-audio'
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -61,17 +71,16 @@ const IssueFormScreen = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLocationLoading, setIsLocationLoading] = useState(true);
 
-  // Mode state: Controls whether to show Text Input or Audio Controls when an image is present
+  // Mode state
   const [isTextMode, setIsTextMode] = useState(true); 
 
   // --- INITIALIZATION EFFECTS ---
 
-  // Request permissions (Microphone & Location)
   useEffect(() => {
     (async () => {
       // Audio permission
+      // CHANGED: Using new 'expo-audio' permission request
       const { status: audioStatus } = await Audio.requestPermissionsAsync();
-      // FIX: Use 'audioStatus' instead of the undeclared 'status' to correctly set permission.
       setAudioPermission(audioStatus === 'granted'); 
 
       // Location permission and fetch
@@ -93,13 +102,12 @@ const IssueFormScreen = () => {
     })();
   }, []);
   
-  // Effect to handle initial VOICENOTE flow (if navigated directly from FAB)
+  // Effect to handle initial VOICENOTE flow
   useEffect(() => {
     if (route.params?.audioMode && !isRecording && !audioUri) {
-        // If navigated here directly for audio, start recording immediately
         startRecording();
     }
-  }, [route.params?.audioMode]); // Depend on audioMode prop
+  }, [route.params?.audioMode]);
 
   // --- Audio Functions ---
   const startRecording = async () => {
@@ -108,20 +116,21 @@ const IssueFormScreen = () => {
       return;
     }
     
-    // Clear previous media only if starting a NEW audio report
     if (!imageUri) {
       setImageUri(null);
     }
     setAudioUri(null);
     setDescription(''); 
-    setIsTextMode(false); // Force into audio mode
+    setIsTextMode(false); 
     
     try {
+      // CHANGED: Using new 'expo-audio' audio mode setting
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
-      });
+      }); 
       
+      // CHANGED: Recording creation logic
       const { recording } = await Audio.Recording.createAsync(
          Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
@@ -143,7 +152,6 @@ const IssueFormScreen = () => {
     setAudioUri(uri);
     setRecording(null);
     setDescription("Audio report (AI transcription pending...)");
-    // If an image is present, switch back to audio controls display mode
     if (imageUri) {
         setIsTextMode(false); 
     }
@@ -161,13 +169,11 @@ const IssueFormScreen = () => {
        return;
     }
 
-    // Validation for image reports in text mode
     if (imageUri && isTextMode && !description.trim()) {
        Alert.alert('Missing Description', 'Please add a detailed description for the image.');
        return;
     }
     
-    // Validation for image reports in audio mode (must have recorded audio)
     if (imageUri && !isTextMode && !audioUri) {
        Alert.alert('Missing Audio', 'Please record your description or switch to text mode.');
        return;
@@ -188,14 +194,16 @@ const IssueFormScreen = () => {
           state: address.region || '',
           zipCode: address.postalCode || '',
           audioUri: audioUri,
+          imageUri: imageUri, 
         };
         response = await createReportWithAudio(audioData); // Calls POST /api/reports/audio
+      
       } else if (imageUri) {
         // SCENARIO 2: Image Submission (Only runs if NO audio is present)
         const reportData: CreateReportData = {
           latitude: location.latitude,
           longitude: location.longitude,
-          description: description, // Now correctly only the text description
+          description: description, 
           address: address.name || address.street || '',
           city: address.city || address.subregion || '',
           state: address.region || '',
@@ -203,14 +211,15 @@ const IssueFormScreen = () => {
           imageUri: imageUri,
         };
         response = await createReport(reportData); // Calls POST /api/reports
+      
       } else {
-         // Should be caught by the earlier check, but good for safety
          throw new Error('No media to submit.');
       }
 
       if (response.success) {
         Alert.alert('✅ Success', 'Report submitted successfully! The AI will now classify your issue.');
-        navigation.goBack(); 
+        
+        navigation.navigate('AppTabs', { screen: 'My Reports' }); 
       }
     } catch (error: any) { 
       setIsSubmitting(false);
@@ -276,7 +285,6 @@ const IssueFormScreen = () => {
   );
 
   const renderDescriptionInput = () => {
-      // If we are in Audio-Only Mode, show only the transcription text
       if (isAudioOnlyMode) {
           return (
               <TextInput
@@ -290,7 +298,6 @@ const IssueFormScreen = () => {
           );
       }
       
-      // If image is present, show Text Input or Audio Controls based on isTextMode
       return (
           <View>
               <View style={styles.modeToggleContainer}>
@@ -300,11 +307,9 @@ const IssueFormScreen = () => {
                       onPress={() => {
                           setIsTextMode(!isTextMode);
                           if (isTextMode) {
-                              // If switching to audio, clear audioUri and prepare to record
                               setAudioUri(null);
                               setDescription('');
                           } else {
-                              // If switching back to text, clear audio recording state
                               setAudioUri(null);
                           }
                       }}
@@ -335,8 +340,6 @@ const IssueFormScreen = () => {
 
       {renderMediaPreview()}
       
-      {/* If only audio was intended, render controls directly. 
-          If media is present, render the flexible description input. */}
       {route.params?.audioMode && !audioUri && !isRecording && (
           <View style={[styles.audioPrompt, { borderColor: COLORS.PRIMARY }]}>
              <Text style={styles.audioText}>Ready for Voice Input</Text>
@@ -344,7 +347,6 @@ const IssueFormScreen = () => {
           </View>
       )}
       
-      {/* Render description input block if an image is present OR if we are in the dedicated audio mode and audio is recorded/transcribing */}
       {(imageUri || isAudioOnlyMode) && renderDescriptionInput()}
 
       {address && ( 

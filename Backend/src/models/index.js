@@ -1,12 +1,8 @@
-/**
- * Models Index
- * Exports all Mongoose models from one central file.
- */
+const mongoose = require('mongoose');
 
-const User = require('./User');
-const Report = require('./Report');
-
+// This file simply registers and exports the models.
+// The connection is now handled by config/database.js
 module.exports = {
-  User,
-  Report
+  User: require('./User'),
+  Report: require('./Report')
 };

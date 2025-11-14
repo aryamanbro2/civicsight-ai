@@ -50,14 +50,14 @@ const reportSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Description is required']
   },
-  mediaUrl: {
-    type: String, // This will be the path to the file, e.g., 'uploads/image-123.jpg'
-    required: true
+  // CHANGED: Replaced mediaUrl/mediaType with explicit fields
+  imageUrl: {
+    type: String, // This will be the path to the photo
+    default: null
   },
-  mediaType: {
-    type: String,
-    enum: ['image', 'video', 'audio'],
-    default: 'image'
+  audioUrl: {
+    type: String, // This will be the path to the audio file
+    default: null
   },
   location: locationSchema, // Embed the location schema
   status: {
@@ -89,6 +89,15 @@ const reportSchema = new mongoose.Schema({
 
 // Create a 2dsphere index for geospatial queries
 reportSchema.index({ "location.coordinates": "2dsphere" });
+
+// Validation to ensure at least one media type is present
+reportSchema.pre('validate', function(next) {
+  if (!this.imageUrl && !this.audioUrl) {
+    next(new Error('A report must include at least an image or an audio file.'));
+  } else {
+    next();
+  }
+});
 
 const Report = mongoose.model('Report', reportSchema);
 module.exports = Report;

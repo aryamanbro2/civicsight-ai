@@ -24,8 +24,8 @@ const audioStorage = new CloudinaryStorage({
     params: {
       folder: 'civicsight-ai-reports/audio', // Separate folder for audio
       // CRITICAL FIX: Use 'raw' resource type to accept generic files like mp4/m4a audio
-      resource_type: 'raw', 
-      allowed_formats: ['m4a', 'mp3', 'wav', 'mp4'], // Allow common audio formats
+      resource_type: 'auto', 
+      allowed_formats: ['m4a', 'mp3', 'wav', 'mp4', 'jpg', 'png', 'jpeg'], // Allow common audio formats
     },
 });
 

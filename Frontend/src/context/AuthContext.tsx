@@ -1,106 +1,121 @@
-import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import * as SecureStore from 'expo-secure-store';
 import * as authService from '../services/authService';
-import { User, LoginCredentials, RegisterCredentials } from '../components/types';
+import { User, LoginData, RegisterData } from '../services/authService';
+import apiClient from '../../api/axiosConfig';
 
-interface AuthContextType {
-  user: User | null;
+interface AuthContextData {
   token: string | null;
-  isAuthenticating: boolean;
-  isLoading: boolean; // This was missing from your provider
-  signIn: (credentials: LoginCredentials) => Promise<void>;
-  signUp: (credentials: RegisterCredentials) => Promise<void>;
-  signOut: () => void;
+  user: User | null;
+  isLoading: boolean;
+  signIn(email: string, password: string): Promise<void>;
+  register(name: string, email: string, password: string): Promise<void>;
+  signOut(): void;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 
-// FIX: Define props for AuthProvider
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-// FIX: Remove deprecated React.FC and use the Props interface
-export const AuthProvider = ({ children }: AuthProviderProps) => {
-  const [user, setUser] = useState<User | null>(null);
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [token, setToken] = useState<string | null>(null);
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [isLoading, setIsLoading] = useState(true); // Default to true
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // FIX: Uncomment the useEffect to load auth data
   useEffect(() => {
-    const loadAuthData = async () => {
-      setIsLoading(true);
+    async function loadStorageData() {
       try {
-        const { token: storedToken, user: storedUser } = await authService.getStoredAuthData();
+        const storedToken = await SecureStore.getItemAsync('userToken');
+        const storedUser = await SecureStore.getItemAsync('userData');
+
         if (storedToken && storedUser) {
+          // Set the header for the initial app load
+          apiClient.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
           setToken(storedToken);
-          setUser(storedUser);
+          setUser(JSON.parse(storedUser));
         }
       } catch (e) {
-        console.error('Failed to load auth data:', e);
+        console.error('Failed to load auth data from storage', e);
       } finally {
         setIsLoading(false);
       }
-    };
-    loadAuthData();
+    }
+    loadStorageData();
   }, []);
 
-  const signIn = async (credentials: LoginCredentials) => {
-    setIsAuthenticating(true);
+  const signIn = async (email: string, password: string) => {
+    // CRITICAL FIX: Set loading to true
+    setIsLoading(true);
     try {
-      const { user, token } = await authService.login(credentials);
-      setUser(user);
+      const loginData: LoginData = { email, password };
+      const { token, user } = await authService.login(loginData);
+      
+      // CRITICAL FIX: Set the header *immediately* upon receiving the token.
+      apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      
+      // Now, set state (this will trigger navigation)
       setToken(token);
+      setUser(user);
+      
+      // Now, save to secure store
+      await SecureStore.setItemAsync('userToken', token);
+      await SecureStore.setItemAsync('userData', JSON.stringify(user));
     } catch (error) {
       console.error('Sign in error:', error);
-      throw error; // Re-throw to be caught by the UI
+      throw error;
     } finally {
-      setIsAuthenticating(false);
+      // CRITICAL FIX: Set loading to false when done
+      setIsLoading(false);
     }
   };
 
-  const signUp = async (credentials: RegisterCredentials) => {
-    setIsAuthenticating(true);
+  const register = async (name: string, email: string, password: string) => {
+    // CRITICAL FIX: Set loading to true
+    setIsLoading(true);
     try {
-      const { user, token } = await authService.register(credentials);
-      setUser(user);
+      const registerData: RegisterData = { name, email, password };
+      const { token, user } = await authService.register(registerData);
+      
+      // CRITICAL FIX: Set the header *immediately* upon receiving the token.
+      apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      
+      // Now, set state (this will trigger navigation)
       setToken(token);
+      setUser(user);
+      
+      // Now, save to secure store
+      await SecureStore.setItemAsync('userToken', token);
+      await SecureStore.setItemAsync('userData', JSON.stringify(user));
     } catch (error) {
-      console.error('Sign up error:', error);
-      throw error; // Re-throw
+      console.error('Register error:', error);
+      throw error;
     } finally {
-      setIsAuthenticating(false);
+      // CRITICAL FIX: Set loading to false when done
+      setIsLoading(false);
     }
   };
 
   const signOut = async () => {
-    await authService.logout();
-    setUser(null);
-    setToken(null);
-  };
-
-  // FIX: Provide the complete value object
-  const value = {
-    user,
-    token,
-    isAuthenticating,
-    isLoading,
-    signIn,
-    signUp,
-    signOut,
+    try {
+      await SecureStore.deleteItemAsync('userToken');
+      await SecureStore.deleteItemAsync('userData');
+      setToken(null);
+      setUser(null);
+      delete apiClient.defaults.headers.common['Authorization'];
+    } catch (e) {
+      console.error('Failed to sign out', e);
+    }
   };
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ token, user, isLoading, signIn, register, signOut }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => {
+export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-};
+}

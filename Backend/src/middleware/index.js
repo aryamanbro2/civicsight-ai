@@ -1,18 +1,14 @@
+// Backend/src/middleware/index.js
 /**
- * Middleware Index
- * Central export point for all custom middleware functions
- * 
- * @author CivicSight AI Team
- * @version 1.0.0
+ * Middleware Barrel File
+ * This file imports and exports all middleware for easy access.
  */
 
-// Import middleware modules
-const authMiddleware = require('./auth');
-// const validationMiddleware = require('./validationMiddleware');
-// const errorMiddleware = require('./errorMiddleware');
+// Import from the new errorHandler.js file
+const { notFoundHandler, errorHandler } = require('./errorHandler');
 
 module.exports = {
-  authMiddleware,
-  // validationMiddleware,
-  // errorMiddleware
+  requireAuth: require('./auth'),
+  errorHandler: errorHandler,
+  notFoundHandler: notFoundHandler, // Add this export
 };

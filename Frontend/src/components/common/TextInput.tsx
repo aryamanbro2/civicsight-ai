@@ -1,55 +1,53 @@
 import React from 'react';
-import { View, Text, TextInput as RNTextInput, StyleSheet, TextInputProps as RNTextInputProps, ViewStyle } from 'react-native';
+import { View, TextInput as RNTextInput, StyleSheet, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
-// --- UPDATE INTERFACE ---
-// It now accepts all React Native TextInput props
-interface TextInputProps extends RNTextInputProps {
-  label?: string;
-  error?: string;
-  style?: ViewStyle; // Explicitly add style to be merged
-}
+// --- DARK THEME CONSTANTS ---
+const DARK_COLORS = {
+  CARD: '#1E1E1E',       
+  TEXT: '#E0E0E0',       
+  SECONDARY_TEXT: '#B0B0B0', 
+  BORDER: '#333333',     
+};
 
-const TextInput: React.FC<TextInputProps> = ({ label, error, style, ...props }) => {
+type Props = React.ComponentProps<typeof RNTextInput> & {
+  icon?: keyof typeof Ionicons.glyphMap;
+};
+
+const TextInput = ({ icon, style, ...props }: Props) => {
   return (
     <View style={styles.container}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {icon && (
+        <Ionicons name={icon} size={20} color={DARK_COLORS.SECONDARY_TEXT} style={styles.icon} />
+      )}
       <RNTextInput
-        style={[styles.input, error ? styles.inputError : null, style]} // <-- Apply style here
-        placeholderTextColor="#9CA3AF"
-        {...props} // <-- SPREAD THE REST OF THE PROPS (multiline, editable, etc.)
+        style={[styles.input, style]}
+        placeholderTextColor={DARK_COLORS.SECONDARY_TEXT}
+        {...props}
       />
-      {error && <Text style={styles.errorText}>{error}</Text>}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    width: '100%',
-    marginVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: DARK_COLORS.CARD,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: DARK_COLORS.BORDER,
+    marginBottom: 15,
+    paddingHorizontal: 10,
   },
-  label: {
-    fontSize: 16,
-    color: '#374151',
-    marginBottom: 8,
-    fontWeight: '600',
+  icon: {
+    marginRight: 10,
   },
   input: {
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    padding: 15,
+    flex: 1,
+    height: 50,
+    color: DARK_COLORS.TEXT,
     fontSize: 16,
-    color: '#111827',
-  },
-  inputError: {
-    borderColor: '#EF4444',
-  },
-  errorText: {
-    color: '#EF4444',
-    fontSize: 14,
-    marginTop: 5,
   },
 });
 

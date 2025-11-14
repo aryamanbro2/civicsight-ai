@@ -12,38 +12,43 @@ const {
   getMyReports, 
   getReportById, 
   updateReportStatus,
-  createReportWithAudio // Import new controller
+  createReportWithAudio 
 } = require('../controllers/reportController');
 const { requireAuth } = require('../middleware/auth');
-// FIX 1: Import both storage (for images) and audioStorage (for audio)
 const { storage, audioStorage } = require('../config/cloudinary'); 
 
 const router = express.Router();
 
 // --- Multer Configuration ---
 
-// Multer instance for image uploads
+// Multer instance for IMAGE-ONLY uploads (remains the same)
 const uploadImage = multer({ 
   storage: storage, 
   limits: { fileSize: 1024 * 1024 * 10 } // 10MB limit
 });
 
-// Multer instance for audio uploads
-const uploadAudio = multer({
-  // FIX 2: Use the dedicated audioStorage for audio uploads
-  storage: audioStorage,
-  limits: { fileSize: 1024 * 1024 * 20 } // 20MB limit for audio
+// CHANGED: Multer instance for AUDIO and COMBO (Image+Audio) uploads
+const uploadCombo = multer({
+  storage: audioStorage, // Use audioStorage (assuming it's set to resource_type: 'auto')
+  limits: { fileSize: 1024 * 1024 * 20 } // 20MB limit
 });
 
 // --- Report Routes (Protected by Auth) ---
 
 // POST /api/reports
-// Create a new report (from image)
+// Create a new report (from image+text)
 router.post('/', requireAuth, uploadImage.single('image'), createReport);
 
 // POST /api/reports/audio
-// Create a new report (from audio)
-router.post('/audio', requireAuth, uploadAudio.single('audio'), createReportWithAudio);
+// CHANGED: This route now handles AUDIO-ONLY and IMAGE+AUDIO reports
+router.post('/audio', 
+  requireAuth, 
+  uploadCombo.fields([ // Use .fields()
+    { name: 'audio', maxCount: 1 },
+    { name: 'image', maxCount: 1 } // Also look for an image
+  ]), 
+  createReportWithAudio
+);
 
 // GET /api/reports
 // Get all reports (for map/feed - requires auth)
@@ -59,6 +64,6 @@ router.get('/:id', requireAuth, getReportById);
 
 // PUT /api/reports/:id/status
 // Update a report's status (for authorities)
-router.put('/:id/status', requireAuth, updateReportStatus); // TODO: Add authority role check
+router.put('/:id/status', requireAuth, updateReportStatus); 
 
 module.exports = router;

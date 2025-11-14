@@ -2,7 +2,6 @@
  * User Model (Mongoose)
  * Defines the schema for a User in the MongoDB database.
  */
-
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
@@ -17,53 +16,34 @@ const userSchema = new mongoose.Schema({
     unique: true,
     lowercase: true,
     trim: true,
-    match: [/\S+@\S+\.\S+/, 'is invalid']
+    match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, 'Please fill a valid email address']
   },
   password: {
     type: String,
-    required: [true, 'Password is required'],
+    required: [true, 'Password is required'], // Back to being required
     minlength: 6
   },
-  role: {
-    type: String,
-    enum: ['citizen', 'authority', 'admin'],
-    default: 'citizen'
-  },
-  phone: {
-    type: String,
-    default: ''
-  },
-  address: {
-    type: String,
-    default: ''
-  },
-  isVerified: {
-    type: Boolean,
-    default: false
-  },
-  lastLoginAt: {
-    type: Date
-  }
+  // REMOVED: googleId field
 }, {
-  timestamps: true // Adds createdAt and updatedAt
+  timestamps: true
 });
 
-// --- Pre-save Hook for Password Hashing ---
-// Before saving a new user, hash their password
+// --- Password Hashing Middleware ---
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) {
     return next();
   }
+  
   try {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
     next();
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    next(err);
   }
 });
 
-// --- Method to Compare Passwords ---
+// --- Password Comparison Method ---
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
