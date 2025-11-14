@@ -15,7 +15,8 @@ const {
   createReportWithAudio // Import new controller
 } = require('../controllers/reportController');
 const { requireAuth } = require('../middleware/auth');
-const { storage } = require('../config/cloudinary'); // Import Cloudinary storage
+// FIX 1: Import both storage (for images) and audioStorage (for audio)
+const { storage, audioStorage } = require('../config/cloudinary'); 
 
 const router = express.Router();
 
@@ -29,7 +30,8 @@ const uploadImage = multer({
 
 // Multer instance for audio uploads
 const uploadAudio = multer({
-  storage: storage,
+  // FIX 2: Use the dedicated audioStorage for audio uploads
+  storage: audioStorage,
   limits: { fileSize: 1024 * 1024 * 20 } // 20MB limit for audio
 });
 

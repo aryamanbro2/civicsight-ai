@@ -8,17 +8,29 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Configure multer-storage-cloudinary
+// Configure multer-storage-cloudinary for Images
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
-    folder: 'civicsight-ai-reports', // A folder name in your Cloudinary account
+    folder: 'civicsight-ai-reports/images', // Separate folder for images
     allowed_formats: ['jpg', 'png', 'jpeg'],
-    // transformation: [{ width: 1024, height: 1024, crop: 'limit' }] // Optional: resize images
+    // resource_type defaults to 'image'
   },
+});
+
+// FIX: Configure multer-storage-cloudinary for Audio
+const audioStorage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+      folder: 'civicsight-ai-reports/audio', // Separate folder for audio
+      // CRITICAL FIX: Use 'raw' resource type to accept generic files like mp4/m4a audio
+      resource_type: 'raw', 
+      allowed_formats: ['m4a', 'mp3', 'wav', 'mp4'], // Allow common audio formats
+    },
 });
 
 module.exports = {
   cloudinary,
-  storage,
+  storage, // Image storage
+  audioStorage, // Audio storage
 };

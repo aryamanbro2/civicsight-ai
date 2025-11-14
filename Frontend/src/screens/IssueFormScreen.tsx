@@ -178,8 +178,8 @@ const IssueFormScreen = () => {
     try {
       let response;
 
-      if (audioUri && !imageUri) {
-        // SCENARIO 1: Pure Voice Note Submission
+     if (audioUri) { 
+        // SCENARIO 1 & 3: Audio submission (with or without image)
         const audioData: CreateReportAudioData = {
           latitude: location.latitude,
           longitude: location.longitude,
@@ -189,20 +189,20 @@ const IssueFormScreen = () => {
           zipCode: address.postalCode || '',
           audioUri: audioUri,
         };
-        response = await createReportWithAudio(audioData);
+        response = await createReportWithAudio(audioData); // Calls POST /api/reports/audio
       } else if (imageUri) {
-        // SCENARIO 2: Image Submission (Description is from text or transcription)
+        // SCENARIO 2: Image Submission (Only runs if NO audio is present)
         const reportData: CreateReportData = {
           latitude: location.latitude,
           longitude: location.longitude,
-          description: description, // Will contain text or transcription placeholder
+          description: description, // Now correctly only the text description
           address: address.name || address.street || '',
           city: address.city || address.subregion || '',
           state: address.region || '',
           zipCode: address.postalCode || '',
           imageUri: imageUri,
         };
-        response = await createReport(reportData);
+        response = await createReport(reportData); // Calls POST /api/reports
       } else {
          // Should be caught by the earlier check, but good for safety
          throw new Error('No media to submit.');
@@ -284,7 +284,7 @@ const IssueFormScreen = () => {
                   placeholder="Audio transcription pending..."
                   multiline
                   numberOfLines={4}
-                  style={[styles.textInput, styles.disabledInput]} 
+                  style={StyleSheet.flatten([styles.textInput, styles.disabledInput])} 
                   editable={false}
               />
           );

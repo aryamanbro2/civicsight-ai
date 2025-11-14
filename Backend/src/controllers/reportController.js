@@ -1,5 +1,3 @@
-
-
 const { Report } = require('../models');
 const axios = require('axios');
 
@@ -271,7 +269,7 @@ const createReportWithAudio = async (req, res, next) => {
         description: "" // Send empty description, AI will fill it
       }, {
         // FIX: Increased timeout to 120 seconds (120000ms) for transcription
-        timeout: 120000 
+        timeout: 240000 
       });
 
       if (aiResult.data && aiResult.data.error) {
@@ -291,6 +289,8 @@ const createReportWithAudio = async (req, res, next) => {
     }
 
     // AI will return a 'non-civic-issue' type if transcription is just noise
+    // 🎯 REMOVED LOGIC: If you want all reports submitted, comment out or remove this check:
+    /*
     if (aiResponse.issueType === 'non-civic-issue') {
       return res.status(422).json({
         error: 'Invalid Issue',
@@ -298,6 +298,7 @@ const createReportWithAudio = async (req, res, next) => {
         code: 'NON_CIVIC_ISSUE'
       });
     }
+    */
 
     // 3. Derive severity/priority from the AI's score
     const score = aiResponse.severityScore || 0;
