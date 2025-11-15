@@ -13,9 +13,10 @@ import {
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'; 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getAllReports, Report } from '../services/reportService';
+// ... other imports
+import { getAllReports, Report, upvoteReport,getVerifiedReports } from '../services/reportService';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../context/AuthContext'; 
+import { useAuth } from '../context/AuthContext'; // <-- 1. ADD THIS IMPORT
 
 // --- CONSTANTS ---
 const DARK_COLORS = {
@@ -39,14 +40,45 @@ const getPriorityColor = (priority: Report['priority']) => {
     default: return '#03DAC6';
   }
 };
+// REPLACE your old ReportCard with this one
 
 const ReportCard = ({ report, onPress }: { report: Report, onPress: () => void }) => {
   const statusColor = report.status === 'completed' ? DARK_COLORS.ACCENT : report.status === 'in_progress' ? DARK_COLORS.PRIMARY : '#B0B0B0'; 
   const priorityColor = getPriorityColor(report.priority);
 
+  // 2. GET THE CURRENT USER
+  const { user } = useAuth(); 
+
+  // 3. FIX THE UPVOTE LOGIC
+  // We check if the report.upvotes array includes the CURRENT USER's ID
+  const [upvoteCount, setUpvoteCount] = useState(report.upvotes?.length || 0);
+  const [isUpvoted, setIsUpvoted] = useState(user ? report.upvotes?.includes(user.id) : false);
+  const [isUpvoting, setIsUpvoting] = useState(false);
+
+  const handleUpvote = async () => {
+    if (isUpvoting) return;
+    setIsUpvoting(true);
+
+    // This optimistic update is still correct
+    setUpvoteCount(upvoteCount + (isUpvoted ? -1 : 1));
+    setIsUpvoted(!isUpvoted);
+
+    try {
+      await upvoteReport(report.id);
+    } catch (error) {
+      // Revert on error
+      setUpvoteCount(upvoteCount);
+      setIsUpvoted(isUpvoted);
+      Alert.alert('Error', 'Could not save upvote.');
+    } finally {
+      setIsUpvoting(false);
+    }
+  };
+
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
       <View style={[styles.card, { borderLeftColor: priorityColor }]}>
+        {/* ... Card image/audio peek ... (This part is fine) */}
         {report.imageUrl ? (
           <Image source={{ uri: report.imageUrl }} style={styles.cardImagePeek} resizeMode="cover" />
         ) : (
@@ -55,36 +87,90 @@ const ReportCard = ({ report, onPress }: { report: Report, onPress: () => void }
             <Text style={styles.audioPeekText}>Audio Report</Text>
           </View>
         )}
+
         <View style={styles.cardContent}>
+            {/* ... cardHeader (This part is fine) ... */}
             <View style={styles.cardHeader}>
               <Text style={styles.cardIssueType} numberOfLines={1}>{report.issueType.toUpperCase()}</Text>
               <View style={[styles.priorityTag, { backgroundColor: priorityColor }]}>
                 <Text style={styles.priorityText}>{report.priority.toUpperCase()}</Text>
               </View>
             </View>
+
+            {/* ... cardDescription (This part is fine) ... */}
             <Text style={styles.cardDescription} numberOfLines={2}>
               {report.description || `[Media report. Tap for details.]`}
             </Text>
+
+            {/* 4. FIX THE LAYOUT in cardFooter */}
             <View style={styles.cardFooter}>
+              
+              {/* This location part is correct */}
               <View style={styles.cardLocationContainer}>
                 <Ionicons name="location-outline" size={14} color={DARK_COLORS.SECONDARY_TEXT} />
                 <Text style={styles.cardLocation} numberOfLines={1}>
                   {report.location.address || 'Unknown Location'}
                 </Text>
               </View>
-              <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-                <Text style={styles.statusText}>{report.status.replace('_', ' ').toUpperCase()}</Text>
+
+              {/* This new View groups the buttons on the right, fixing the layout.
+              */}
+              <View style={styles.rightFooterGroup}>
+                <TouchableOpacity onPress={handleUpvote} style={styles.upvoteButton}>
+                  <Ionicons 
+                    name={isUpvoted ? "arrow-up-circle" : "arrow-up-circle-outline"} 
+                    size={20} 
+                    color={isUpvoted ? DARK_COLORS.PRIMARY : DARK_COLORS.SECONDARY_TEXT} 
+                  />
+                  <Text style={[styles.upvoteText, isUpvoted && {color: DARK_COLORS.PRIMARY}]}>
+                    {upvoteCount}
+                  </Text>
+                </TouchableOpacity>
+
+                <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
+                  <Text style={styles.statusText}>{report.status.replace('_', ' ').toUpperCase()}</Text>
+                </View>
               </View>
+              {/* End of layout fix */}
+
             </View>
         </View>
       </View>
     </TouchableOpacity>
   );
 };
+// Replace the entire FeaturedReportCard component with this:
 
 const FeaturedReportCard = ({ report, onPress }: { report: Report, onPress: () => void }) => {
   const priorityColor = getPriorityColor(report.priority);
   const fallbackImage = !report.imageUrl;
+
+  // --- Upvote Logic (This is all correct) ---
+  const { user } = useAuth();
+  const [upvoteCount, setUpvoteCount] = useState(report.upvotes?.length || 0);
+  const [isUpvoted, setIsUpvoted] = useState(user ? report.upvotes?.includes(user.id) : false);
+  const [isUpvoting, setIsUpvoting] = useState(false);
+
+  const handleUpvote = async () => {
+    if (isUpvoting) return;
+    setIsUpvoting(true);
+
+    // Optimistic UI update
+    setUpvoteCount(upvoteCount + (isUpvoted ? -1 : 1));
+    setIsUpvoted(!isUpvoted);
+
+    try {
+      await upvoteReport(report.id);
+    } catch (error) {
+      // Revert on error
+      setUpvoteCount(upvoteCount);
+      setIsUpvoted(isUpvoted);
+      Alert.alert('Error', 'Could not save upvote.');
+    } finally {
+      setIsUpvoting(false);
+    }
+  };
+  // --- End of Upvote Logic ---
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.9} style={styles.featuredCard}>
@@ -93,9 +179,13 @@ const FeaturedReportCard = ({ report, onPress }: { report: Report, onPress: () =
         style={[styles.featuredImage, fallbackImage && styles.audioPeek]}
         resizeMode="cover"
       >
+        {/* Fallback icon for audio-only reports */}
         {fallbackImage && (
           <Ionicons name="mic-outline" size={60} color={DARK_COLORS.SECONDARY_TEXT} />
         )}
+
+        {/* --- THIS IS THE FIX --- */}
+        {/* Adding back the overlay you liked */}
         <View style={styles.featuredOverlay}>
           <Text style={styles.featuredTitle} numberOfLines={2}>
             {report.issueType.toUpperCase()}
@@ -104,11 +194,16 @@ const FeaturedReportCard = ({ report, onPress }: { report: Report, onPress: () =
             <Text style={styles.priorityText}>{report.priority.toUpperCase()}</Text>
           </View>
         </View>
+        {/* --- END OF FIX --- */}
+
       </ImageBackground>
+
       <View style={styles.featuredContent}>
         <Text style={styles.featuredDescription} numberOfLines={2}>
           {report.description}
         </Text>
+        
+        {/* This footer now contains both location and the upvote button */}
         <View style={styles.cardFooter}>
             <View style={styles.cardLocationContainer}>
               <Ionicons name="location-outline" size={14} color={DARK_COLORS.SECONDARY_TEXT} />
@@ -116,12 +211,44 @@ const FeaturedReportCard = ({ report, onPress }: { report: Report, onPress: () =
                 {report.location.address || 'Unknown Location'}
               </Text>
             </View>
-          </View>
+
+            {/* This is the upvote button from the last step */}
+            <TouchableOpacity onPress={handleUpvote} style={styles.upvoteButton}>
+              <Ionicons 
+                name={isUpvoted ? "arrow-up-circle" : "arrow-up-circle-outline"} 
+                size={20} 
+                color={isUpvoted ? DARK_COLORS.PRIMARY : DARK_COLORS.SECONDARY_TEXT} 
+              />
+              <Text style={[styles.upvoteText, isUpvoted && {color: DARK_COLORS.PRIMARY}]}>
+                {upvoteCount}
+              </Text>
+            </TouchableOpacity>
+        </View>
       </View>
     </TouchableOpacity>
   );
 };
+// Add this new component inside FeedScreen.tsx
 
+const VerifiedReportCard = ({ report, onPress }: { report: Report, onPress: () => void }) => {
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={styles.verifiedCard}>
+      <ImageBackground
+        source={report.imageUrl ? { uri: report.imageUrl } : undefined}
+        style={styles.verifiedImage}
+        resizeMode="cover"
+      >
+        <View style={styles.verifiedOverlay}>
+          <Text style={styles.verifiedText} numberOfLines={2}>{report.issueType}</Text>
+          <View style={styles.verifiedUpvote}>
+            <Ionicons name="arrow-up-circle" size={16} color={DARK_COLORS.TEXT} />
+            <Text style={styles.verifiedUpvoteText}>{report.upvoteCount}</Text>
+          </View>
+        </View>
+      </ImageBackground>
+    </TouchableOpacity>
+  );
+};
 
 type RootStackParamList = {
   AppTabs: undefined; 
@@ -137,32 +264,41 @@ const FeedScreen = () => {
   const [latestReport, setLatestReport] = useState<Report | null>(null);
   const [otherReports, setOtherReports] = useState<Report[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  
+  const [verifiedReports, setVerifiedReports] = useState<Report[]>([]);
   // CRITICAL FIX: Use the loading state from AuthContext
-  const { isLoading: isAuthLoading } = useAuth();
+  const { isLoading: isAuthLoading,signOut } = useAuth();
   
   const insets = useSafeAreaInsets();
   
-  const fetchAllReports = useCallback(async () => {
+ const fetchAllReports = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const response = await getAllReports();
-      setLatestReport(response.reports[0] || null);
-      setOtherReports(response.reports.slice(1));
+     const [allReportsResponse, verifiedReportsResponse] = await Promise.all([
+        getAllReports(),
+        getVerifiedReports()
+      ]);
 
+      setLatestReport(allReportsResponse.reports[0] || null);
+      setOtherReports(allReportsResponse.reports.slice(1));
+      setVerifiedReports(verifiedReportsResponse.reports);
     } catch (error: any) {
       console.error('Error loading all reports:', error.message); 
-      if (error.message === 'Token has expired. Please sign in again.') {
+      
+      // 3. Make the check less specific
+      if (error.message.includes('Token') || error.message.includes('Authentication') || error.message.includes('User not found')) {
         Alert.alert(
           'Session Expired',
-          'You have been logged out. Please sign in again.'
+          'You have been logged out. Please sign in again.',
+          // 4. Add the signOut call on "OK"
+          [ { text: 'OK', onPress: () => signOut() } ]
         );
+      } else {
+        Alert.alert('Error', 'Could not load community reports. Please pull to refresh.');
       }
     } finally {
       setIsRefreshing(false);
     }
-  }, []); 
-
+  }, [signOut]);
   const renderEmptyList = () => (
     <View style={styles.emptyContainer}>
       <Ionicons name="earth-outline" size={50} color={DARK_COLORS.SECONDARY_TEXT} />
@@ -187,6 +323,24 @@ const FeedScreen = () => {
 
   const renderHeader = () => (
     <>
+      {verifiedReports.length > 0 && (
+        <>
+          <Text style={styles.sectionTitle}>Verified Reports</Text>
+          <FlatList
+            data={verifiedReports}
+            renderItem={({ item }) => (
+              <VerifiedReportCard 
+                report={item} 
+                onPress={() => handleCardPress(item)} 
+              />
+            )}
+            keyExtractor={(item) => item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingLeft: 15, paddingBottom: 10 }} // Add padding
+          />
+        </>
+      )}
       {latestReport && (
         <>
           <Text style={styles.sectionTitle}>Latest Report</Text>
@@ -324,6 +478,18 @@ const styles = StyleSheet.create({
     color: DARK_COLORS.SECONDARY_TEXT,
     marginBottom: 10,
   },
+  upvoteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10, // Add some spacing
+    padding: 5,
+  },
+  upvoteText: {
+    marginLeft: 4,
+    fontSize: 14,
+    color: DARK_COLORS.SECONDARY_TEXT,
+    fontWeight: '600',
+  },
   card: {
     flexDirection: 'row',
     backgroundColor: DARK_COLORS.CARD,
@@ -437,6 +603,46 @@ const styles = StyleSheet.create({
     marginTop: 5,
     textAlign: 'center',
   },
+  rightFooterGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  // In styles = StyleSheet.create(...)
+verifiedCard: {
+  width: 150,
+  height: 200,
+  borderRadius: 12,
+  overflow: 'hidden',
+  backgroundColor: DARK_COLORS.CARD,
+  marginRight: 10,
+  elevation: 3,
+},
+verifiedImage: {
+  flex: 1,
+  justifyContent: 'flex-end',
+},
+verifiedOverlay: {
+  backgroundColor: 'rgba(0,0,0,0.6)',
+  padding: 8,
+  minHeight: 60,
+  justifyContent: 'space-between',
+},
+verifiedText: {
+  color: DARK_COLORS.TEXT,
+  fontSize: 14,
+  fontWeight: '600',
+},
+verifiedUpvote: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginTop: 4,
+},
+verifiedUpvoteText: {
+  color: DARK_COLORS.TEXT,
+  fontSize: 12,
+  fontWeight: 'bold',
+  marginLeft: 4,
+},
 });
 
 export default FeedScreen;

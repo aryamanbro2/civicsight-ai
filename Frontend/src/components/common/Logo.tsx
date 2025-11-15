@@ -1,44 +1,43 @@
+// Frontend/src/components/common/Logo.tsx
+
 import React from 'react';
-import { Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
-interface LogoProps {
-  size?: 'small' | 'medium' | 'large' | number; // Allow number for size
-}
-
-// FIX: Removed React.FC
-const Logo = ({ size = 'large' }: LogoProps) => {
-  const getTextStyle = () => {
-    if (typeof size === 'number') {
-      return { fontSize: size };
-    }
-    switch (size) {
-      case 'small':
-        return styles.small;
-      case 'medium':
-        return styles.medium;
-      case 'large':
-      default:
-        return styles.large;
-    }
-  };
-
-  return <Text style={[styles.base, getTextStyle()]}>CivicSight.ai</Text>;
+// --- DARK THEME CONSTANTS ---
+// We define colors here so the component is self-contained
+const DARK_COLORS = {
+  PRIMARY: '#BB86FC',    
+  ACCENT: '#03DAC6',     
+  TEXT: '#E0E0E0',
 };
 
+const Logo = () => (
+  <View style={styles.logoContainer}>
+    <Ionicons name="eye-outline" size={32} color={DARK_COLORS.PRIMARY} />
+    <Text style={styles.logoText}>
+      <Text style={styles.logoTextPrimary}>Civic</Text>
+      <Text style={styles.logoTextAccent}>Sight</Text>
+    </Text>
+  </View>
+);
+
 const styles = StyleSheet.create({
-  base: {
-    fontWeight: '400',
-    color: '#000000',
-    // fontFamily: 'System', // Use default system font
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  small: {
-    fontSize: 24,
+  logoText: {
+    fontSize: 32,
+    fontWeight: '800',
+    marginLeft: 10,
   },
-  medium: {
-    fontSize: 30,
+  logoTextPrimary: {
+    color: DARK_COLORS.TEXT, // "Civic" in white
   },
-  large: {
-    fontSize: 36,
+  logoTextAccent: {
+    color: DARK_COLORS.PRIMARY, // "Sight" in purple
   },
 });
 

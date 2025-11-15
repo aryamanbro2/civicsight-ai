@@ -2,20 +2,26 @@ import apiClient from '../../api/axiosConfig';
 
 // --- Interfaces ---
 
-// CHANGED: Added 'export'
+// NEW: This object holds the raw stats from the backend
+export interface UserStats {
+  reportCount: number;
+  totalUpvotesReceived: number;
+  categoryCounts: { [key: string]: number };
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
+  badges?: string[];
+  stats?: UserStats; // <-- UPDATED: Use stats object
 }
 
-// CHANGED: Added 'export'
 export interface LoginData {
   email: string;
   password: string;
 }
 
-// CHANGED: Added 'export'
 export interface RegisterData extends LoginData {
   name: string;
 }
@@ -27,11 +33,17 @@ interface AuthResponse {
   user: User;
 }
 
-/**
- * Logs in a user
- * @param {LoginData} data - { email, password }
- * @returns {Promise<AuthResponse>}
- */
+// Fetches the complete user profile, including stats
+const getProfile = async (): Promise<User> => {
+    try {
+        const response = await apiClient.get('/auth/profile');
+        return response.data.user; 
+    } catch (error: any) {
+        console.error('Error fetching profile:', error.response?.data || error.message);
+        throw new Error(error.response?.data?.message || 'Failed to fetch profile');
+    }
+};
+
 const login = async (data: LoginData): Promise<AuthResponse> => {
   try {
     const response = await apiClient.post('/auth/login', data);
@@ -42,11 +54,6 @@ const login = async (data: LoginData): Promise<AuthResponse> => {
   }
 };
 
-/**
- * Registers a new user
- * @param {RegisterData} data - { name, email, password }
- * @returns {Promise<AuthResponse>}
- */
 const register = async (data: RegisterData): Promise<AuthResponse> => {
   try {
     const response = await apiClient.post('/auth/register', data);
@@ -57,4 +64,4 @@ const register = async (data: RegisterData): Promise<AuthResponse> => {
   }
 };
 
-export { login, register };
+export { login, register, getProfile };

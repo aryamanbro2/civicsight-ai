@@ -4,5 +4,6 @@ const mongoose = require('mongoose');
 // The connection is now handled by config/database.js
 module.exports = {
   User: require('./User'),
-  Report: require('./Report')
+  Report: require('./Report'),
+  Comment: require('./Comment'),
 };

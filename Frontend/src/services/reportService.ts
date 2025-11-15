@@ -1,11 +1,10 @@
-// Frontend/src/services/reportService.ts
-
 import apiClient from '../../api/axiosConfig';
 
 // --- Interfaces ---
-// (Your existing interfaces are correct)
+
+// This interface now includes the new `upvotes` field
 export interface Report {
-  id: string;
+  id: string; // This is `_id` from MongoDB, but transformed
   userId: string;
   issueType: string;
   description: string;
@@ -24,9 +23,12 @@ export interface Report {
   severityScore: number;
   aiMetadata?: any;
   createdAt: string; 
-  updatedAt: string; 
+  updatedAt: string;
+  upvotes: string[];
+  upvoteCount: number; // <-- ADD THIS LINE // <-- ADDED FOR UPVOTE FEATURE
 }
 
+// Data for IMAGE reports
 export interface CreateReportData {
   latitude: number;
   longitude: number;
@@ -38,6 +40,7 @@ export interface CreateReportData {
   imageUri: string;
 }
 
+// Data for AUDIO reports
 export interface CreateReportAudioData {
   latitude: number;
   longitude: number;
@@ -49,24 +52,56 @@ export interface CreateReportAudioData {
   imageUri: string | null;
 }
 
+// Response for creating/upvoting a report
 export interface CreateReportResponse {
   message: string;
   success: boolean;
   report: Report;
 }
 
+// Response for getting a list of reports
 export interface ListReportsResponse {
   message: string;
   success: boolean;
   count: number;
   reports: Report[];
-  statistics?: any;
+  statistics?: any; // For 'my' reports
+}
+
+// --- NEW Interfaces for Comments ---
+export interface CommentUser {
+  _id: string; // Note: This will be the ID, not id
+  name: string;
+  email: string;
+}
+
+export interface ReportComment {
+  _id: string;
+  text: string;
+  reportId: string;
+  userId: CommentUser; // This will be populated by the backend
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ListCommentsResponse {
+  message: string;
+  success: boolean;
+  count: number;
+  comments: ReportComment[];
+}
+
+export interface CreateCommentResponse {
+  message: string;
+  success: boolean;
+  comment: ReportComment;
 }
 
 // --- API Service ---
 
 /**
- * REWRITTEN: Helper to check for all authentication-related errors.
+ * CRITICAL FIX: This helper catches ALL auth-related errors,
+ * not just 'TOKEN_EXPIRED'.
  */
 const isAuthError = (error: any) => {
   const code = error.response?.data?.code;
@@ -79,54 +114,65 @@ const isAuthError = (error: any) => {
 /**
 * Fetches the reports for the currently authenticated user
 */
+// In Frontend/src/services/reportService.ts
+
+// In Frontend/src/services/reportService.ts
+
 const getMyReports = async (page = 1, limit = 10): Promise<ListReportsResponse> => {
   try {
-    // This request is automatically intercepted by axiosConfig to add the token
     const response = await apiClient.get('/reports/my', {
       params: { page, limit },
     });
+
+    // --- ADD THIS CHECK ---
+    if (!response.data) {
+      throw new Error("Received an empty response from the server.");
+    }
+    // --- END ADD ---
+
     return response.data;
   } catch (error: any) {
     console.error('Error fetching my reports:', error.response?.data || error.message);
     
-    // REWRITTEN: Catch the specific auth error and throw it for the UI.
     if (isAuthError(error)) {
-        // Throw the specific message from the backend (e.g., "User not found")
-        throw new Error(error.response?.data?.message || 'Authentication error');
+        throw new Error(error.response?.data?.message || 'Authentication error. Please sign in again.');
     }
-    
-    // Throw a generic error for other issues (e.g., server down)
-    throw new Error(error.response?.data?.message || 'Failed to fetch reports');
+    // This will now catch the error we threw above
+    throw new Error(error.response?.data?.message || error.message || 'Failed to fetch reports');
   }
 };
-
 /**
 * Fetches all reports for the dashboard feed
 */
+// In Frontend/src/services/reportService.ts
+
+// In Frontend/src/services/reportService.ts
+
 const getAllReports = async (page = 1, limit = 10): Promise<ListReportsResponse> => {
   try {
-    // This request is automatically intercepted by axiosConfig to add the token
     const response = await apiClient.get('/reports', {
       params: { page, limit },
     });
+
+    // --- ADD THIS CHECK ---
+    if (!response.data) {
+      throw new Error("Received an empty response from the server.");
+    }
+    // --- END ADD ---
+
     return response.data;
   } catch (error: any) {
     console.error('Error fetching all reports:', error.response?.data || error.message);
     
-    // REWRITTEN: Catch the specific auth error and throw it for the UI.
     if (isAuthError(error)) {
-        // Throw the specific message from the backend (e.g., "User not found")
-        throw new Error(error.response?.data?.message || 'Authentication error');
+        throw new Error(error.response?.data?.message || 'Authentication error. Please sign in again.');
     }
-    
-    // Throw a generic error for other issues
-    throw new Error(error.response?.data?.message || 'Failed to fetch reports');
+    // This will now catch the error we threw above
+    throw new Error(error.response?.data?.message || error.message || 'Failed to fetch reports');
   }
 };
-
 /**
  * Creates a new report by uploading an IMAGE and form data
- * (This function was correct, no changes needed)
  */
 const createReport = async (data: CreateReportData): Promise<CreateReportResponse> => {
   try {
@@ -163,7 +209,6 @@ const createReport = async (data: CreateReportData): Promise<CreateReportRespons
 
 /**
  * Creates a new report by uploading an AUDIO file (and optionally an IMAGE)
- * (This function was correct, no changes needed)
  */
 const createReportWithAudio = async (data: CreateReportAudioData): Promise<CreateReportResponse> => {
   try {
@@ -203,20 +248,100 @@ const createReportWithAudio = async (data: CreateReportAudioData): Promise<Creat
     });
 
     return response.data;
-  } catch (error: any)
-    {
+  } catch (error: any) {
     console.error('Error creating audio report:', error.response?.data || error.message);
     throw new Error(error.response?.data?.message || 'Failed to create audio report');
   }
 };
 
+// --- NEW FUNCTIONS FOR UPVOTES & COMMENTS ---
+
+/**
+ * Toggles an upvote on a report
+ */
+const upvoteReport = async (reportId: string): Promise<CreateReportResponse> => {
+  try {
+    // This re-uses the CreateReportResponse as they are compatible
+    const response = await apiClient.put(`/reports/${reportId}/upvote`);
+    return response.data;
+  } catch (error: any) {
+    console.error('Error upvoting report:', error.response?.data || error.message);
+    if (isAuthError(error)) {
+      throw new Error(error.response?.data?.message || 'Authentication error. Please sign in again.');
+    }
+    throw new Error(error.response?.data?.message || 'Failed to upvote report');
+  }
+};
+
+/**
+ * Gets all comments for a report
+ */
+const getComments = async (reportId: string): Promise<ListCommentsResponse> => {
+  try {
+    const response = await apiClient.get(`/reports/${reportId}/comments`);
+    return response.data;
+  } catch (error: any) {
+    console.error('Error fetching comments:', error.response?.data || error.message);
+    if (isAuthError(error)) {
+      throw new Error(error.response?.data?.message || 'Authentication error. Please sign in again.');
+    }
+    throw new Error(error.response?.data?.message || 'Failed to fetch comments');
+  }
+};
+
+/**
+ * Posts a new comment
+ */
+const postComment = async (reportId: string, text: string): Promise<CreateCommentResponse> => {
+  try {
+    const response = await apiClient.post(`/reports/${reportId}/comments`, { text });
+    return response.data;
+  } catch (error: any) {
+    console.error('Error posting comment:', error.response?.data || error.message);
+    if (isAuthError(error)) {
+      throw new Error(error.response?.data?.message || 'Authentication error. Please sign in again.');
+    }
+    throw new Error(error.response?.data?.message || 'Failed to post comment');
+  }
+};
+const getVerifiedReports = async (): Promise<ListReportsResponse> => {
+  try {
+    const response = await apiClient.get('/reports/verified');
+    
+    if (!response.data) {
+      throw new Error("Received an empty response from the server.");
+    }
+    return response.data;
+  } catch (error: any) {
+    console.error('Error fetching verified reports:', error.response?.data || error.message);
+    if (isAuthError(error)) {
+        throw new Error(error.response?.data?.message || 'Authentication error. Please sign in again.');
+    }
+    throw new Error(error.response?.data?.message || error.message || 'Failed to fetch reports');
+  }
+};
 // --- Exports ---
-// (Your existing exports are correct)
+
+// Named exports for individual use in screens
+export { 
+  createReport, 
+  createReportWithAudio, 
+  getMyReports, 
+  getAllReports,
+  upvoteReport,
+  getComments,
+  postComment,
+  getVerifiedReports,
+};
+
+// Default export object for convenience
 export const reportService = {
   createReport,
   createReportWithAudio,
   getMyReports,
   getAllReports,
+  upvoteReport,
+  getComments,
+  postComment,
+  getVerifiedReports,
 };
-
-export { createReport, createReportWithAudio, getMyReports, getAllReports };

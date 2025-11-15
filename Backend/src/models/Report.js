@@ -82,7 +82,12 @@ const reportSchema = new mongoose.Schema({
   aiMetadata: {
     type: mongoose.Schema.Types.Mixed, // To store the raw AI response
     default: null
-  }
+  },
+  upvotes: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  upvoteCount: { type: Number, default: 0, index: true },
 }, {
   timestamps: true // Adds createdAt and updatedAt
 });
@@ -96,6 +101,13 @@ reportSchema.pre('validate', function(next) {
     next(new Error('A report must include at least an image or an audio file.'));
   } else {
     next();
+  }
+});
+
+reportSchema.set('toJSON', {
+  virtuals: true,
+  transform: (doc, ret) => {
+    delete ret.__v; // Optional: clean up the output
   }
 });
 

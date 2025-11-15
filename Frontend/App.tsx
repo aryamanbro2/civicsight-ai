@@ -1,12 +1,10 @@
-import React, { useState, useRef } from 'react'; 
+// Frontend/App.tsx
+
+import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, ActivityIndicator, Text, TouchableOpacity } from 'react-native'; 
-import { 
-  NavigationContainer, 
-  NavigationState,
-  NavigationContainerRef 
-} from '@react-navigation/native';
-import { createNativeStackNavigator, NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'; 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -19,12 +17,22 @@ import ReportDetailScreen from './src/screens/ReportDetailScreen';
 import IssueFormScreen from './src/screens/IssueFormScreen';
 import CameraScreen from './src/screens/CameraScreen'; 
 import FeedScreen from './src/screens/FeedScreen'; 
-
-// --- Placeholder Screens ---
 import MapScreen from './src/screens/MapScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import Logo from './src/components/common/Logo'; // Import the logo
 
-const Stack = createNativeStackNavigator();
+// --- Types ---
+// Define param list for navigation
+type AppStackParamList = {
+  AppTabs: undefined;
+  ReportDetail: { report: any }; // 'any' should be your Report type
+  CameraScreen: undefined;
+  IssueForm: { imageUri?: string; audioUri?: string };
+  AuthStack: undefined; // The authenticated flow
+  Auth: undefined; 
+};
+
+const Stack = createNativeStackNavigator<AppStackParamList>();
 const Tab = createBottomTabNavigator();
 
 // --- DARK THEME & CONSTANTS ---
@@ -37,133 +45,152 @@ const DARK_COLORS = {
   BORDER: '#333333',     
   SECONDARY_TEXT: '#B0B0B0',
 };
-const FIXED_TAB_BAR_HEIGHT = 55; 
 
-const LoadingScreen = () => (
-  <View style={styles.loadingContainer}>
-    <ActivityIndicator size="large" color={DARK_COLORS.PRIMARY} />
-  </View>
+// Frontend/App.tsx
+
+// ... other imports
+
+// --- Custom Tab Button for Creating Reports ---
+const CustomTabBarButton: React.FC<any> = ({ children, onPress }) => (
+  <TouchableOpacity
+    style={{
+      top: -25,
+      justifyContent: 'center',
+      alignItems: 'center',
+      ...styles.shadow,
+    }}
+    onPress={onPress}
+  >
+    {/* This View is the purple circle */}
+    <View style={{
+      width: 70,
+      height: 70,
+      borderRadius: 40,
+      backgroundColor: DARK_COLORS.PRIMARY,
+
+      // THESE ARE THE TWO LINES THAT FIX THE ALIGNMENT:
+      justifyContent:'center',
+      alignItems: 'center'
+    }}>
+      {/* This 'children' is the "plus" icon, which will now be centered */}
+      {children}
+    </View>
+  </TouchableOpacity>
 );
 
-// --- 1. Tab Navigator (Same) ---
-const AppTabNavigator = () => {
+// ... rest of your App.tsx file
+// --- 1. Tab Navigator (NEW 5-TAB LAYOUT) ---
+// We pass navigation from the parent StackNavigator
+const AppTabNavigator = ({ navigation }: { navigation: any }) => {
     const insets = useSafeAreaInsets();
     return (
         <Tab.Navigator
             screenOptions={({ route }) => ({
                 headerShown: false,
+                tabBarShowLabel: false, // We just want icons
                 tabBarActiveTintColor: DARK_COLORS.PRIMARY,
                 tabBarInactiveTintColor: DARK_COLORS.SECONDARY_TEXT,
                 tabBarStyle: {
                     backgroundColor: DARK_COLORS.CARD, 
                     borderTopColor: DARK_COLORS.BORDER,
                     borderTopWidth: 1,
-                    height: FIXED_TAB_BAR_HEIGHT + insets.bottom, 
-                    paddingBottom: insets.bottom > 0 ? insets.bottom * 0.8 : 5, 
-                    paddingTop: 5, 
-                },
-                tabBarIcon: ({ focused, color, size }) => {
-                    let iconName: keyof typeof Ionicons.glyphMap;
-                    if (route.name === 'Feed') {
-                        iconName = focused ? 'earth' : 'earth-outline';
-                    } else if (route.name === 'Map') {
-                        iconName = focused ? 'map' : 'map-outline';
-                    } else if (route.name === 'My Reports') {
-                        iconName = focused ? 'document-text' : 'document-text-outline';
-                    } else if (route.name === 'Profile') {
-                        iconName = focused ? 'person' : 'person-outline';
-                    } else {
-                        iconName = 'alert-circle-outline';
-                    }
-                    return <Ionicons name={iconName} size={size} color={color} />;
+                    height: 60 + insets.bottom, // Good base height
+                    paddingBottom: insets.bottom,
                 },
             })}
         >
+            {/* Tab 1: Feed */}
             <Tab.Screen 
               name="Feed" 
               component={FeedScreen} 
-              options={{ title: 'Community Feed' }} 
+              options={{ 
+                tabBarIcon: ({ color, size }) => <Ionicons name="earth-outline" size={size} color={color} />,
+              }}
             />
-            <Tab.Screen name="Map" component={MapScreen} />
+            {/* Tab 2: Map */}
+            <Tab.Screen 
+              name="Map" 
+              component={MapScreen} 
+              options={{ 
+                tabBarIcon: ({ color, size }) => <Ionicons name="map-outline" size={size} color={color} />,
+              }}
+            />
+
+            {/* Tab 3: NEW "CREATE" BUTTON */}
+            <Tab.Screen 
+              name="Create"
+              component={CameraScreen} // Dummy component, won't be shown
+              options={{
+                tabBarIcon: ({ focused }) => (
+                  <Ionicons name="add" size={32} color={DARK_COLORS.CARD} />
+                ),
+                tabBarButton: (props) => (
+                  <CustomTabBarButton
+                    {...props}
+                    onPress={() => navigation.navigate('CameraScreen')} // Go to camera
+                  />
+                ),
+              }}
+              // This listener intercepts the tap and navigates
+             
+            />
+
+            {/* Tab 4: My Reports */}
             <Tab.Screen 
               name="My Reports" 
               component={DashboardScreen} 
+              options={{ 
+                tabBarIcon: ({ color, size }) => <Ionicons name="document-text-outline" size={size} color={color} />,
+              }}
             />
-            <Tab.Screen name="Profile" component={ProfileScreen} />
+            {/* Tab 5: Profile */}
+            <Tab.Screen 
+              name="Profile" 
+              component={ProfileScreen} 
+              options={{ 
+                tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
+              }}
+            />
         </Tab.Navigator>
     );
 };
 
-// Define param list for navigation
-type AppStackParamList = {
-  AppTabs: undefined;
-  ReportDetail: { report: any }; 
-  CameraScreen: undefined;
-  IssueForm: { imageUri: string };
-};
-
 // --- 2. Authenticated Stack ---
-const AppStack = ({ 
-  currentRouteName, 
-  // CHANGED: Allow the ref prop to be null
-  navigationRef
-}: { 
-  currentRouteName: string, 
-  navigationRef: React.RefObject<NavigationContainerRef<AppStackParamList> | null> 
-}) => {
-  const insets = useSafeAreaInsets();
-
-  const handleCreateReport = () => {
-    // This check is now type-safe
-    navigationRef.current?.navigate('CameraScreen'); 
-  };
-  
-  const isTabScreen = ['Feed', 'Map', 'My Reports', 'Profile'].includes(currentRouteName);
-  
-  return (
-    <View style={{ flex: 1, backgroundColor: DARK_COLORS.BACKGROUND }}>
-      <Stack.Navigator 
-        screenOptions={{ 
-          headerShown: false,
-          contentStyle: { backgroundColor: DARK_COLORS.CARD }
-        }}
-      >
-        <Stack.Screen name="AppTabs" component={AppTabNavigator} /> 
-        <Stack.Screen 
-            name="ReportDetail" 
-            component={ReportDetailScreen}
-            options={{ 
-                headerShown: true, 
-                headerStyle: { backgroundColor: DARK_COLORS.CARD }, 
-                headerTintColor: DARK_COLORS.TEXT, 
-                title: 'Issue Details' 
-            }} 
-        />
-        <Stack.Screen name="CameraScreen" component={CameraScreen} />
-        <Stack.Screen 
-            name="IssueForm" 
-            component={IssueFormScreen}
-            options={{ 
-                headerShown: true, 
-                headerStyle: { backgroundColor: DARK_COLORS.CARD }, 
-                headerTintColor: DARK_COLORS.TEXT, 
-                title: 'File Report' 
-            }} 
-        />
-      </Stack.Navigator>
-      
-      {isTabScreen && (
-        <TouchableOpacity 
-          style={[styles.fab, { bottom: (FIXED_TAB_BAR_HEIGHT / 2) + insets.bottom }]} 
-          onPress={handleCreateReport}
-          activeOpacity={0.9}
-        >
-          <Ionicons name="add" size={32} color={DARK_COLORS.CARD} />
-        </TouchableOpacity>
-      )}
-    </View>
-  );
-};
+// This stack now passes its navigation prop to AppTabNavigator
+const AppStack = () => (
+  <Stack.Navigator 
+    screenOptions={{ 
+      headerShown: false,
+      contentStyle: { backgroundColor: DARK_COLORS.CARD }
+    }}
+  >
+    {/* Pass navigation to the component */}
+    <Stack.Screen name="AppTabs" component={AppTabNavigator} /> 
+    
+    <Stack.Screen 
+        name="ReportDetail" 
+        component={ReportDetailScreen}
+        options={{ 
+            headerShown: true, 
+            headerStyle: { backgroundColor: DARK_COLORS.CARD }, 
+            headerTintColor: DARK_COLORS.TEXT, 
+            title: 'Issue Details' 
+        }} 
+    />
+    <Stack.Screen name="CameraScreen" component={CameraScreen} />
+    
+    <Stack.Screen 
+        name="IssueForm" 
+        component={IssueFormScreen}
+        options={{ 
+            headerShown: true, 
+            headerStyle: { backgroundColor: DARK_COLORS.CARD }, 
+            headerTintColor: DARK_COLORS.TEXT, 
+            title: 'File Report' 
+        }} 
+    />
+  </Stack.Navigator>
+);
 
 // --- 3. Unauthenticated Stack (Same) ---
 const AuthStack = () => (
@@ -172,15 +199,17 @@ const AuthStack = () => (
     </Stack.Navigator>
 );
 
-// --- 4. Main Switch Component ---
-const RootNavigator = ({ 
-  currentRouteName,
-  // CHANGED: Allow the ref prop to be null
-  navigationRef
-}: { 
-  currentRouteName: string,
-  navigationRef: React.RefObject<NavigationContainerRef<AppStackParamList> | null> 
-}) => {
+// --- 4. Loading Screen (UPDATED) ---
+const LoadingScreen = () => (
+  <View style={styles.loadingContainer}>
+    <Logo />
+    <ActivityIndicator size="large" color={DARK_COLORS.PRIMARY} style={{ marginTop: 20 }}/>
+  </View>
+);
+
+// --- 5. Main Switch Component (SIMPLIFIED) ---
+// We no longer need to track route names or pass refs for the FAB
+const RootNavigator = () => {
   const { token, isLoading } = useAuth();
   const isAuthenticated = !!token;
 
@@ -189,39 +218,17 @@ const RootNavigator = ({
   }
 
   return (
-    isAuthenticated ? 
-      <AppStack currentRouteName={currentRouteName} navigationRef={navigationRef} /> 
-    : <AuthStack />
+    isAuthenticated ? <AppStack /> : <AuthStack />
   );
 };
 
-// --- 5. Main App Component ---
+// --- 6. Main App Component (SIMPLIFIED) ---
 export default function App() {
-  const [currentRouteName, setCurrentRouteName] = useState('Auth');
-  
-  // CHANGED: Initialize ref with null and correct type
-  const navigationRef = useRef<NavigationContainerRef<AppStackParamList> | null>(null);
-
-  const getActiveRouteName = (state: NavigationState | undefined): string => {
-    if (!state) return 'AppTabs'; // Default
-    const route = state.routes[state.index];
-    if (route.state) {
-      return getActiveRouteName(route.state as NavigationState);
-    }
-    return route.name;
-  };
-
   return (
     <SafeAreaProvider> 
-      <NavigationContainer
-        ref={navigationRef}
-        onStateChange={(state) => {
-          const newRouteName = getActiveRouteName(state);
-          setCurrentRouteName(newRouteName);
-        }}
-      >
+      <NavigationContainer>
         <AuthProvider>
-          <RootNavigator currentRouteName={currentRouteName} navigationRef={navigationRef} />
+          <RootNavigator />
           <StatusBar style="light" backgroundColor={DARK_COLORS.CARD} /> 
         </AuthProvider>
       </NavigationContainer>
@@ -229,33 +236,24 @@ export default function App() {
   );
 }
 
+// --- 7. Styles (SIMPLIFIED) ---
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
-    backgroundColor: DARK_COLORS.BACKGROUND,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  placeholderScreen: {
-    flex: 1, 
     justifyContent: 'center', 
     alignItems: 'center', 
-    backgroundColor: DARK_COLORS.BACKGROUND
+    backgroundColor: DARK_COLORS.BACKGROUND,
   },
-  fab: {
-    position: 'absolute',
-    width: 75,
-    height: 75,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center', 
-    backgroundColor: DARK_COLORS.PRIMARY,
-    borderRadius: 40,
-    elevation: 10,
+  // Style for the custom button shadow
+  shadow: {
     shadowColor: DARK_COLORS.PRIMARY,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 5,
-    zIndex: 10, 
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
   }
+  // REMOVED: styles.fab (no longer needed)
 });

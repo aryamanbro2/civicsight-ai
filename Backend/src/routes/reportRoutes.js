@@ -12,7 +12,11 @@ const {
   getMyReports, 
   getReportById, 
   updateReportStatus,
-  createReportWithAudio 
+  createReportWithAudio,
+  upvoteReport,             // <-- Ensures this is imported
+  getCommentsForReport,     // <-- Ensures this is imported
+  createCommentForReport,
+  getVerifiedReports,    // <-- Ensures this is imported
 } = require('../controllers/reportController');
 const { requireAuth } = require('../middleware/auth');
 const { storage, audioStorage } = require('../config/cloudinary'); 
@@ -21,49 +25,53 @@ const router = express.Router();
 
 // --- Multer Configuration ---
 
-// Multer instance for IMAGE-ONLY uploads (remains the same)
 const uploadImage = multer({ 
   storage: storage, 
   limits: { fileSize: 1024 * 1024 * 10 } // 10MB limit
 });
 
-// CHANGED: Multer instance for AUDIO and COMBO (Image+Audio) uploads
 const uploadCombo = multer({
-  storage: audioStorage, // Use audioStorage (assuming it's set to resource_type: 'auto')
+  storage: audioStorage,
   limits: { fileSize: 1024 * 1024 * 20 } // 20MB limit
 });
 
 // --- Report Routes (Protected by Auth) ---
 
-// POST /api/reports
-// Create a new report (from image+text)
+// POST /api/reports (Create image+text report)
 router.post('/', requireAuth, uploadImage.single('image'), createReport);
 
-// POST /api/reports/audio
-// CHANGED: This route now handles AUDIO-ONLY and IMAGE+AUDIO reports
+// POST /api/reports/audio (Create audio-only or image+audio report)
 router.post('/audio', 
   requireAuth, 
-  uploadCombo.fields([ // Use .fields()
+  uploadCombo.fields([
     { name: 'audio', maxCount: 1 },
-    { name: 'image', maxCount: 1 } // Also look for an image
+    { name: 'image', maxCount: 1 }
   ]), 
   createReportWithAudio
 );
 
-// GET /api/reports
-// Get all reports (for map/feed - requires auth)
+// GET /api/reports (Get all reports)
 router.get('/', requireAuth, getReports);
 
-// GET /api/reports/my
-// Get reports submitted by the authenticated user
+// GET /api/reports/my (Get user's own reports)
 router.get('/my', requireAuth, getMyReports);
+router.get('/verified', requireAuth, getVerifiedReports);
 
-// GET /api/reports/:id
-// Get a single report by ID
+// GET /api/reports/:id (Get single report)
 router.get('/:id', requireAuth, getReportById);
 
-// PUT /api/reports/:id/status
-// Update a report's status (for authorities)
+// PUT /api/reports/:id/status (Update report status)
 router.put('/:id/status', requireAuth, updateReportStatus); 
+
+// --- NEW ROUTES ---
+
+// PUT /api/reports/:id/upvote (Toggle upvote for a report)
+router.put('/:id/upvote', requireAuth, upvoteReport);
+
+// GET /api/reports/:id/comments (Get comments for a report)
+router.get('/:id/comments', requireAuth, getCommentsForReport);
+
+// POST /api/reports/:id/comments (Add a comment to a report)
+router.post('/:id/comments', requireAuth, createCommentForReport);
 
 module.exports = router;

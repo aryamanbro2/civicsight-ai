@@ -1,7 +1,12 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react'; // <-- Import useCallback
 import * as SecureStore from 'expo-secure-store';
-import * as authService from '../services/authService';
-import { User, LoginData, RegisterData } from '../services/authService';
+import { 
+    User, 
+    LoginData, 
+    RegisterData,
+    login,
+    register as registerUserApi
+} from '../services/authService'; 
 import apiClient from '../../api/axiosConfig';
 
 interface AuthContextData {
@@ -11,6 +16,7 @@ interface AuthContextData {
   signIn(email: string, password: string): Promise<void>;
   register(name: string, email: string, password: string): Promise<void>;
   signOut(): void;
+  updateUser: (user: User) => Promise<void>; 
 }
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
@@ -27,10 +33,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const storedUser = await SecureStore.getItemAsync('userData');
 
         if (storedToken && storedUser) {
-          // Set the header for the initial app load
           apiClient.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
           setToken(storedToken);
-          setUser(JSON.parse(storedUser));
+          setUser(JSON.parse(storedUser) as User); 
         }
       } catch (e) {
         console.error('Failed to load auth data from storage', e);
@@ -41,65 +46,67 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadStorageData();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
+  // --- FIX: Wrap all provider functions in useCallback ---
+
+  const updateUser = useCallback(async (userData: User) => {
+      setUser(userData);
+      await SecureStore.setItemAsync('userData', JSON.stringify(userData));
+  }, []); // Empty dependency array = stable function
+
+  const signIn = useCallback(async (email: string, password: string) => {
     setIsLoading(true);
     try {
       const loginData: LoginData = { email, password };
-      const { token, user } = await authService.login(loginData);
+      const { token, user: userData } = await login(loginData);
       
-      // Set the header *immediately* upon receiving the token.
       apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
       setToken(token);
-      setUser(user);
-      
+      await updateUser(userData); // Use stable function
       await SecureStore.setItemAsync('userToken', token);
-      await SecureStore.setItemAsync('userData', JSON.stringify(user));
     } catch (error) {
       console.error('Sign in error:', error);
+      setIsLoading(false);
       throw error;
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [updateUser]); // Depends on stable updateUser
 
-  const register = async (name: string, email: string, password: string) => {
+  const register = useCallback(async (name: string, email: string, password: string) => {
     setIsLoading(true);
     try {
       const registerData: RegisterData = { name, email, password };
-      const { token, user } = await authService.register(registerData);
+      const { token, user: userData } = await registerUserApi(registerData);
       
-      // Set the header *immediately* upon receiving the token.
       apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
       setToken(token);
-      setUser(user);
-      
+      await updateUser(userData); // Use stable function
       await SecureStore.setItemAsync('userToken', token);
-      await SecureStore.setItemAsync('userData', JSON.stringify(user));
     } catch (error) {
       console.error('Register error:', error);
+      setIsLoading(false);
       throw error;
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [updateUser]); // Depends on stable updateUser
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     try {
       await SecureStore.deleteItemAsync('userToken');
       await SecureStore.deleteItemAsync('userData');
       setToken(null);
       setUser(null);
-      // Clear the header on sign out
       delete apiClient.defaults.headers.common['Authorization'];
     } catch (e) {
       console.error('Failed to sign out', e);
     }
-  };
+  }, []); // Empty dependency array = stable function
+
+  // --- END OF FIX ---
 
   return (
-    <AuthContext.Provider value={{ token, user, isLoading, signIn, register, signOut }}>
+    <AuthContext.Provider value={{ token, user, isLoading, signIn, register, signOut, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
@@ -112,3 +119,5 @@ export function useAuth() {
   }
   return context;
 }
+
+export type { User };

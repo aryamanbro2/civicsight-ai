@@ -5,15 +5,13 @@ import numpy as np
 
 # --- AI Library Imports ---
 import torch
-# import whisper # We now use whisperx instead of vanilla whisper for loading
 import librosa 
 from inference_sdk import InferenceHTTPClient # For Roboflow
-import whisperx # ADDED: Import WhisperX
+import whisperx # Import WhisperX
 
 # --- Global Models & Device ---
 AUDIO_MODEL = None
-ALIGNMENT_MODEL = None # ADDED: Model for alignment/hallucination correction
-METADATA = None # ADDED: Metadata for alignment model
+# ALIGNMENT_MODEL and METADATA are now loaded dynamically
 INFERENCE_CLIENT = None # Roboflow client
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -26,15 +24,15 @@ def load_models():
     """
     Loads and initializes the necessary AI models into memory using WhisperX.
     """
-    global AUDIO_MODEL, ALIGNMENT_MODEL, METADATA, INFERENCE_CLIENT
+    # FIX: Alignment models are no longer loaded here
+    global AUDIO_MODEL, INFERENCE_CLIENT
     print(f"AI_CLASSIFIER: Starting model loading process on device: {DEVICE}")
     
-    # 1. Image Model (Roboflow API Client) - REMAINS THE SAME
+    # 1. Image Model (Roboflow API Client)
     if not all([ROBOFLOW_API_KEY, ROBOFLOW_WORKSPACE_NAME, ROBOFLOW_WORKFLOW_ID]):
         print("WARNING: Roboflow environment variables (API_KEY, WORKSPACE_NAME, WORKFLOW_ID) are not set.")
         print("         AI image classification will NOT work.")
     else:
-        # Connect to the new serverless API
         INFERENCE_CLIENT = InferenceHTTPClient(
             api_url="https://serverless.roboflow.com",
             api_key=ROBOFLOW_API_KEY
@@ -42,32 +40,25 @@ def load_models():
         print("AI_CLASSIFIER: Roboflow Inference Client initialized.")
 
     # 2. Audio Model (WhisperX Transcription Model)
-    # FIX 1: Use whisperx.load_model (using 'medium' for Codespaces memory safety)
     AUDIO_MODEL = whisperx.load_model("small", device=DEVICE, compute_type="float32")
     print("AI_CLASSIFIER: WhisperX Transcription (small) model loaded.")
 
-    # 3. Audio Alignment Model (for phonetic error correction)
-    # FIX 2: Load the alignment model separately.
-    ALIGNMENT_MODEL, METADATA = whisperx.load_align_model(
-        language_code="hi", 
-        device=DEVICE
-    )
-    print("AI_CLASSIFIER: Audio Alignment model loaded.")
+    # 3. FIX: Alignment model is REMOVED from startup.
+    #    It will be loaded dynamically based on detected language.
 
-    print("AI_CLASSIFIER: All models initialized successfully.")
+    print("AI_CLASSIFIER: Core models initialized successfully.")
 
 # --- Helper Functions for Inference ---
 
-# _analyze_image_for_severity remains the same.
 def _analyze_image_for_severity(image_url):
     """
     Sends the image URL to the Roboflow Workflow API for classification.
+    (This function is unchanged)
     """
     if INFERENCE_CLIENT is None:
         return {"error": "Roboflow client is not configured"}
 
     try:
-        # 1. Run the workflow using the image URL
         result = INFERENCE_CLIENT.run_workflow(
             workspace_name=ROBOFLOW_WORKSPACE_NAME,
             workflow_id=ROBOFLOW_WORKFLOW_ID,
@@ -75,7 +66,6 @@ def _analyze_image_for_severity(image_url):
             use_cache=True
         )
         
-        # 2. Process results
         if not result:
             print("Roboflow gave an empty result list.")
             return {"issueType": "other", "severityScore": 0, "tags": ["empty-result-list", "ai-classified"]}
@@ -92,7 +82,6 @@ def _analyze_image_for_severity(image_url):
             return {"issueType": "other", "severityScore": 0, "tags": ["missing-inner-list", "ai-classified"]}
 
         if not predictions_list:
-            # Model ran but found no issues in the image.
             print("Roboflow analysis complete: No issues detected. Returning 'non-civic-issue'.")
             return {
                 "issueType": "non-civic-issue",
@@ -100,7 +89,6 @@ def _analyze_image_for_severity(image_url):
                 "tags": ["no-issue-detected", "ai-classified"]
             }
 
-        # SUCCESS! We have predictions. Get the one with the highest confidence.
         top_prediction = max(predictions_list, key=lambda p: p.get('confidence', 0.0))
         
         issue_type = top_prediction.get('class', top_prediction.get('top', 'other'))
@@ -123,11 +111,12 @@ def _analyze_image_for_severity(image_url):
 
 def _process_audio_for_structure(audio_url, user_description):
     """
-    Downloads audio, runs WhisperX transcription and alignment for high accuracy.
-    The output text is in the original spoken language (multilingual).
+    Downloads audio, runs WhisperX transcription (auto-detecting language),
+    then dynamically loads the correct alignment model for high accuracy.
     """
-    global AUDIO_MODEL, ALIGNMENT_MODEL, METADATA
-    if AUDIO_MODEL is None or ALIGNMENT_MODEL is None:
+    # FIX: Only check for AUDIO_MODEL
+    global AUDIO_MODEL
+    if AUDIO_MODEL is None:
         return {"error": "Audio models are not loaded"}
 
     try:
@@ -143,52 +132,67 @@ def _process_audio_for_structure(audio_url, user_description):
             audio_data = whisperx.load_audio(tmpfile.name)
             
             # 4. Run Transcription (task="transcribe" is default)
-            # FIX 3: Use AUDIO_MODEL.transcribe with no task/prompt
+            # Language is set to None for auto-detection
             result = AUDIO_MODEL.transcribe(
                 audio_data, 
                 batch_size=4, 
-                language=None # Use auto-detection for multilingual
+                language=None 
             ) 
             
-            # 5. Run Alignment (Corrects hallucinations and improves word timing)
-            # FIX 4: Call whisperx.align
+            # --- DYNAMIC ALIGNMENT FIX ---
+            # 5. Get detected language and load the correct alignment model
+            detected_language = result["language"]
+            print(f"AI_CLASSIFIER: Detected language: {detected_language}")
+
+            try:
+                # Attempt to load the alignment model for the *detected* language
+                alignment_model, metadata = whisperx.load_align_model(
+                    language_code=detected_language, 
+                    device=DEVICE
+                )
+                print(f"AI_CLASSIFIER: Loaded alignment model for '{detected_language}'.")
+            except ValueError:
+                # Fallback to English if an alignment model for the
+                # detected language (e.g., 'ur' - Urdu) is not available
+                print(f"AI_CLASSIFIER: No default alignment model for '{detected_language}'. Falling back to 'en'.")
+                alignment_model, metadata = whisperx.load_align_model(
+                    language_code="en", 
+                    device=DEVICE
+                )
+            # --- END OF FIX ---
+            
+            # 6. Run Alignment (Corrects hallucinations and improves word timing)
             aligned_result = whisperx.align(
                 result["segments"], 
-                ALIGNMENT_MODEL, 
-                METADATA, 
+                alignment_model, # Use the dynamically loaded model
+                metadata,        # Use the dynamically loaded metadata
                 audio_data, 
                 DEVICE
             )
             
-            # 6. Get the final text (join all segments)
+            # 7. Get the final text (join all segments)
             transcribed_text = " ".join([segment["text"] for segment in aligned_result["segments"]]).strip()
 
         print(f"AI_CLASSIFIER: Aligned Transcription: '{transcribed_text}'")
 
-        # 7. Simple NLP (Keyword matching on *transcribed* text)
+        # 8. Simple NLP (Keyword matching on *transcribed* text)
         issue_type = "other" # Default
         severity_score = 3
         tags = ["voice-report", "ai-classified"]
 
         text_lower = transcribed_text.lower()
         
-        # NOTE: Since the text is now accurately transcribed in the original language (e.g., Hinglish), 
-        # the simple English keyword matching logic below MUST be updated to include non-English terms
-        # (e.g., add "gadde" to Pothole keywords) for accurate classification.
-
-        # Pothole keywords
+        # (Your keyword matching logic remains unchanged)
         if any(kw in text_lower for kw in ["pothole", "pit", "hole in the road", "road is broken", "deep hole"]):
             issue_type = "pothole"
             severity_score = 5
             tags.append("pothole")
         
-        # Garbage keywords
         elif any(kw in text_lower for kw in ["garbage", "trash", "waste", "dump", "pile of trash"]):
             issue_type = "garbage"
             severity_score = 4
             tags.append("garbage")
 
-        # Streetlight keywords
         elif any(kw in text_lower for kw in ["street light", "streetlight", "light is out", "lamp is broken"]):
             issue_type = "street_light"
             severity_score = 3
@@ -223,7 +227,8 @@ def classify_audio(audio_url, user_description):
     """
     Main function for audio reports.
     """
-    if AUDIO_MODEL is None or ALIGNMENT_MODEL is None: 
+    # FIX: Only check for AUDIO_MODEL
+    if AUDIO_MODEL is None: 
         return {"error": "NLP models not loaded"}, 500
     
     return _process_audio_for_structure(audio_url, user_description)

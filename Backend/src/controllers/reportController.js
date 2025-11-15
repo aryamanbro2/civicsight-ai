@@ -1,4 +1,4 @@
-const { Report } = require('../models');
+const { Report, Comment } = require('../models'); // Make sure Comment is imported
 const axios = require('axios');
 
 // --- AI Service Configuration ---
@@ -63,16 +63,12 @@ const createReport = async (req, res, next) => {
         priority = 'medium';
     }
 
-    // 3. Create and save the new report to MongoDB
     const newReport = new Report({
       userId,
       issueType: aiResponse.issueType || 'uncategorized',
       description,
-      
-      // CHANGED: Use new model fields
       imageUrl: publicImageUrl,
       audioUrl: null, // No audio for this report type
-
       location: {
         type: 'Point',
         coordinates: [parseFloat(longitude), parseFloat(latitude)],
@@ -86,6 +82,7 @@ const createReport = async (req, res, next) => {
       priority: priority,
       severityScore: aiResponse.severityScore || 0,
       aiMetadata: aiResponse
+      // upvotes is intentionally omitted, will default to []
     });
 
     await newReport.save();
@@ -223,7 +220,6 @@ const createReportWithAudio = async (req, res, next) => {
   try {
     const userId = req.userId;
     
-    // CHANGED: Now using req.files from uploadCombo.fields
     const imageFile = req.files.image ? req.files.image[0] : null;
     const audioFile = req.files.audio ? req.files.audio[0] : null;
 
@@ -237,16 +233,14 @@ const createReportWithAudio = async (req, res, next) => {
        return res.status(400).json({ error: 'Validation failed', message: 'Latitude and longitude are required', code: 'MISSING_FIELDS' });
     }
 
-    // 1. Get public URLs from Cloudinary
     const publicAudioUrl = audioFile.path;
-    const publicImageUrl = imageFile ? imageFile.path : null; // Get image path if it exists
+    const publicImageUrl = imageFile ? imageFile.path : null;
     
     console.log(`[Report] Audio uploaded, public URL: ${publicAudioUrl}`);
     if (publicImageUrl) {
       console.log(`[Report] Image (combo) uploaded, public URL: ${publicImageUrl}`);
     }
 
-    // 2. Call the AI Microservice AUDIO endpoint
     const aiEndpoint = `${AI_SERVICE_URL}/api/ai/classify/audio`;
     let aiResponse;
     const defaultAiResponse = { issueType: 'uncategorized', severityScore: 0, tags: [], description: 'Audio report (transcription pending)' };
@@ -256,7 +250,7 @@ const createReportWithAudio = async (req, res, next) => {
 
       const aiResult = await axios.post(aiEndpoint, {
         mediaUrl: publicAudioUrl,
-        description: "" // Send empty description, AI will fill it
+        description: ""
       }, {
         timeout: 240000 
       });
@@ -277,7 +271,6 @@ const createReportWithAudio = async (req, res, next) => {
       aiResponse = defaultAiResponse;
     }
 
-    // 3. Derive severity/priority from the AI's score
     const score = aiResponse.severityScore || 0;
     let severity = 'low';
     let priority = 'low';
@@ -290,17 +283,12 @@ const createReportWithAudio = async (req, res, next) => {
         priority = 'medium';
     }
 
-    // 4. Create and save the new report
     const newReport = new Report({
       userId,
-      // Use transcription from AI as the description
       description: aiResponse.description || 'Audio report (transcription failed)',
       issueType: aiResponse.issueType || 'uncategorized',
-      
-      // CHANGED: Use new model fields
-      imageUrl: publicImageUrl, // Will be NULL for audio-only, POPULATED for combo
-      audioUrl: publicAudioUrl,  // Will always be populated here
-
+      imageUrl: publicImageUrl,
+      audioUrl: publicAudioUrl,
       location: {
         type: 'Point',
         coordinates: [parseFloat(longitude), parseFloat(latitude)],
@@ -314,6 +302,7 @@ const createReportWithAudio = async (req, res, next) => {
       priority: priority,
       severityScore: score,
       aiMetadata: aiResponse
+      // upvotes is intentionally omitted, will default to []
     });
 
     await newReport.save();
@@ -338,11 +327,143 @@ const createReportWithAudio = async (req, res, next) => {
   }
 };
 
+// --- NEW FUNCTIONS FROM PREVIOUS STEP ---
+
+/**
+ * Upvote / Toggle Upvote (Phase 2A)
+ * PUT /api/reports/:id/upvote
+ */
+const upvoteReport = async (req, res, next) => {
+  try {
+    const { id } = req.params; // The report ID
+    const userId = req.userId; // From requireAuth middleware
+
+    const report = await Report.findById(id);
+
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found', code: 'NOT_FOUND' });
+    }
+
+    const upvotedIndex = report.upvotes.indexOf(userId);
+
+    if (upvotedIndex > -1) {
+      report.upvotes.pull(userId);
+    } else {
+      report.upvotes.push(userId);
+    }
+    report.upvoteCount = report.upvotes.length;
+    await report.save();
+
+    res.json({
+      message: 'Upvote toggled successfully',
+      success: true,
+      report: report
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Create Comment for Report (Phase 2A)
+ * POST /api/reports/:id/comments
+ */
+const createCommentForReport = async (req, res, next) => {
+  try {
+    const { id } = req.params; // The report ID
+    const userId = req.userId;
+    const { text } = req.body;
+
+    if (!text) {
+      return res.status(400).json({ error: 'Validation failed', message: 'Comment text is required', code: 'MISSING_TEXT' });
+    }
+
+    const report = await Report.findById(id);
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found', code: 'NOT_FOUND' });
+    }
+
+    const newComment = new Comment({
+      text,
+      reportId: id,
+      userId,
+    });
+
+    await newComment.save();
+    
+    const populatedComment = await newComment.populate('userId', 'name email');
+
+    res.status(201).json({
+      message: 'Comment added successfully',
+      success: true,
+      comment: populatedComment
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get Comments for Report (Phase 2A)
+ * GET /api/reports/:id/comments
+ */
+const getCommentsForReport = async (req, res, next) => {
+  try {
+    const { id } = req.params; // The report ID
+
+    const comments = await Comment.find({ reportId: id })
+      .populate('userId', 'name email')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      message: 'Comments retrieved successfully',
+      success: true,
+      count: comments.length,
+      comments: comments
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+/**
+ * Get Verified Reports (Sorted by Upvotes)
+ * GET /api/reports/verified
+ */
+const getVerifiedReports = async (req, res, next) => {
+  try {
+    const reports = await Report.find({
+      // Only find reports with at least one upvote
+      upvoteCount: { $gt: 0 } 
+    })
+    .sort({ upvoteCount: -1 }) // Sort by the count, highest first
+    .limit(10) // Send the Top 10
+    .populate('userId', 'name email'); // Populate user data
+
+    res.json({
+      message: 'Verified reports retrieved successfully',
+      success: true,
+      count: reports.length,
+      reports: reports
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// --- THIS IS THE CRITICAL FIX ---
+// This export block must include all the new functions.
 module.exports = {
   createReport,
   getReports,
   getMyReports,
   getReportById,
   updateReportStatus,
-  createReportWithAudio
+  createReportWithAudio,
+  upvoteReport,
+  getCommentsForReport,
+  createCommentForReport,
+  getVerifiedReports,
 };

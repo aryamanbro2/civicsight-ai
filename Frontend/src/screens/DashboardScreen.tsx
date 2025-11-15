@@ -137,9 +137,8 @@ const DashboardScreen = () => {
   const [latestReport, setLatestReport] = useState<Report | null>(null);
   const [otherReports, setOtherReports] = useState<Report[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  
-  // --- CRITICAL FIX: Use the loading state from AuthContext ---
-  const { isLoading: isAuthLoading } = useAuth();
+  const { isLoading: isAuthLoading, signOut } = useAuth();
+ 
   
   const insets = useSafeAreaInsets();
   
@@ -152,16 +151,23 @@ const DashboardScreen = () => {
 
     } catch (error: any) {
       console.error('Error loading reports:', error.message); 
-      if (error.message === 'Token has expired. Please sign in again.') {
+      
+      // 3. Make the check less specific to catch all auth errors
+      if (error.message.includes('Token') || error.message.includes('Authentication') || error.message.includes('User not found')) {
         Alert.alert(
           'Session Expired',
-          'You have been logged out. Please sign in again.'
+          'You have been logged out. Please sign in again.',
+          // 4. Add the signOut call on "OK"
+          [ { text: 'OK', onPress: () => signOut() } ]
         );
+      } else {
+        // Show a generic error for other issues
+        Alert.alert('Error', 'Could not load your reports. Please pull to refresh.');
       }
     } finally {
       setIsRefreshing(false);
     }
-  }, []); 
+  }, [signOut]);
 
   const renderEmptyList = () => (
     <View style={styles.emptyContainer}>

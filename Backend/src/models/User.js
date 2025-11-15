@@ -23,6 +23,26 @@ const userSchema = new mongoose.Schema({
     required: [true, 'Password is required'], // Back to being required
     minlength: 6
   },
+  // --- UPDATED BADGES ENUM ---
+  badges: [{
+    type: String,
+    enum: [
+      'Newbie Reporter', 
+      'Super Contributor', 
+      'Community Hero', 
+      'Verified Voice', 
+      'Pothole Master', 
+      'Noise Control',
+      'The Architect', // 5+ Infrastructure reports
+      'Sanitation Star' // 5+ Sanitation reports
+    ],
+    default: [],
+  }],
+  // --- END UPDATED BADGES ENUM ---
+  lastReportedCategory: {
+    type: String,
+    default: null // Tracks the issue type of the last report for new badge calculation
+  }
   // REMOVED: googleId field
 }, {
   timestamps: true
@@ -47,6 +67,14 @@ userSchema.pre('save', async function(next) {
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
+
+// Ensure virtual 'id' exists
+userSchema.set('toJSON', {
+  virtuals: true,
+  transform: (doc, ret) => {
+    delete ret.__v;
+  }
+});
 
 const User = mongoose.model('User', userSchema);
 module.exports = User;
