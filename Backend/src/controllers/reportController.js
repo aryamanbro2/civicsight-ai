@@ -232,7 +232,7 @@ const createReportWithAudio = async (req, res, next) => {
        return res.status(400).json({ error: 'Validation failed', message: 'Latitude and longitude are required', code: 'MISSING_FIELDS' });
     }
 
-    const publicAudioUrl = audioFile.path;
+    const publicAudioUrl = originalAudioUrl.replace("/upload/", "/upload/fl_attachment/");
     const publicImageUrl = imageFile ? imageFile.path : null;
     
     console.log(`[Report] Audio uploaded, public URL: ${publicAudioUrl}`);
