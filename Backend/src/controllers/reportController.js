@@ -2,8 +2,7 @@ const { Report, Comment } = require('../models'); // Make sure Comment is import
 const axios = require('axios');
 
 // --- AI Service Configuration ---
-const AI_SERVICE_URL = 'https://bookish-space-sniffle-ggrx9pq764vcv9vp-5000.app.github.dev';
-
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL;
 /**
  * Create a new report (M-02) - IMAGE + TEXT
  * POST /api/reports
