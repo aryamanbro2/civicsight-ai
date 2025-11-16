@@ -7,6 +7,3 @@ python-dotenv
 inference-sdk
 
 # --- SPEECH-TO-TEXT & NLP (Whisper) ---
-openai-whisper==20231117
-librosa
-whisperx

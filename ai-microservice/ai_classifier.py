@@ -1,19 +1,14 @@
-import requests
+
+import requests 
 import os
-import tempfile
-import numpy as np
-
-# --- AI Library Imports ---
-import torch
-import librosa 
-from inference_sdk import InferenceHTTPClient # For Roboflow
-import whisperx # Import WhisperX
-
+import tempfile 
+import json # Add json for parsing responses
+from inference_sdk import InferenceHTTPClient
 # --- Global Models & Device ---
-AUDIO_MODEL = None
-# ALIGNMENT_MODEL and METADATA are now loaded dynamically
+GLADIA_API_KEY = os.environ.get("GLADIA_API_KEY") 
+GLADIA_API_URL = "https://api.gladia.io/v2/transcription"
+
 INFERENCE_CLIENT = None # Roboflow client
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # --- Roboflow Config (Loaded from .env by ai-server.py) ---
 ROBOFLOW_API_KEY = os.environ.get("ROBOFLOW_API_KEY")
@@ -25,8 +20,8 @@ def load_models():
     Loads and initializes the necessary AI models into memory using WhisperX.
     """
     # FIX: Alignment models are no longer loaded here
-    global AUDIO_MODEL, INFERENCE_CLIENT
-    print(f"AI_CLASSIFIER: Starting model loading process on device: {DEVICE}")
+    global  INFERENCE_CLIENT
+    print(f"AI_CLASSIFIER: Starting model loading process...")
     
     # 1. Image Model (Roboflow API Client)
     if not all([ROBOFLOW_API_KEY, ROBOFLOW_WORKSPACE_NAME, ROBOFLOW_WORKFLOW_ID]):
@@ -39,14 +34,12 @@ def load_models():
         )
         print("AI_CLASSIFIER: Roboflow Inference Client initialized.")
 
-    # 2. Audio Model (WhisperX Transcription Model)
-    AUDIO_MODEL = whisperx.load_model("tiny", device=DEVICE, compute_type="float16")
-    print("AI_CLASSIFIER: WhisperX Transcription (small) model loaded.")
 
-    # 3. FIX: Alignment model is REMOVED from startup.
-    #    It will be loaded dynamically based on detected language.
+    if not GLADIA_API_KEY:
+        print("CRITICAL WARNING: GLADIA_API_KEY is not set. Audio classification will fail.")
 
-    print("AI_CLASSIFIER: Core models initialized successfully.")
+    print("AI_CLASSIFIER: Core API clients initialized successfully.")
+
 
 # --- Helper Functions for Inference ---
 
@@ -111,69 +104,48 @@ def _analyze_image_for_severity(image_url):
 
 def _process_audio_for_structure(audio_url, user_description):
     """
-    Downloads audio, runs WhisperX transcription (auto-detecting language),
-    then dynamically loads the correct alignment model for high accuracy.
+    Sends the public audio URL to the Gladia API for transcription.
     """
-    # FIX: Only check for AUDIO_MODEL
-    global AUDIO_MODEL
-    if AUDIO_MODEL is None:
-        return {"error": "Audio models are not loaded"}
+    if not audio_url or not audio_url.startswith('http'): # ADD THIS CHECK
+        return {"error": "Invalid or missing audio URL provided."}
+    
+    if not GLADIA_API_KEY:
+        return {"error": "Gladia API key not configured"}
 
     try:
-        # 1. Download audio
-        response = requests.get(audio_url)
-        response.raise_for_status()
+        # 1. Setup API Payload
+        headers = {
+            "x-gladia-key": GLADIA_API_KEY,
+            "Content-Type": "application/json"
+        }
 
-        # 2. Save to a temporary file
-        with tempfile.NamedTemporaryFile(suffix=".tmp") as tmpfile:
-            tmpfile.write(response.content)
-            
-            # 3. Load audio with WhisperX utility
-            audio_data = whisperx.load_audio(tmpfile.name)
-            
-            # 4. Run Transcription (task="transcribe" is default)
-            # Language is set to None for auto-detection
-            result = AUDIO_MODEL.transcribe(
-                audio_data, 
-                batch_size=4, 
-                language=None 
-            ) 
-            
-            # --- DYNAMIC ALIGNMENT FIX ---
-            # 5. Get detected language and load the correct alignment model
-            detected_language = result["language"]
-            print(f"AI_CLASSIFIER: Detected language: {detected_language}")
+        # Request translation and diarization (optional)
+        payload = {
+            "audio_url": audio_url,
+            "toggle_diarization": False,
+            "language_behaviour": "automatic single language", # Multilingual mode
+            "output_format": "json"
+        }
 
-            try:
-                # Attempt to load the alignment model for the *detected* language
-                alignment_model, metadata = whisperx.load_align_model(
-                    language_code=detected_language, 
-                    device=DEVICE
-                )
-                print(f"AI_CLASSIFIER: Loaded alignment model for '{detected_language}'.")
-            except ValueError:
-                # Fallback to English if an alignment model for the
-                # detected language (e.g., 'ur' - Urdu) is not available
-                print(f"AI_CLASSIFIER: No default alignment model for '{detected_language}'. Falling back to 'en'.")
-                alignment_model, metadata = whisperx.load_align_model(
-                    language_code="en", 
-                    device=DEVICE
-                )
-            # --- END OF FIX ---
-            
-            # 6. Run Alignment (Corrects hallucinations and improves word timing)
-            aligned_result = whisperx.align(
-                result["segments"], 
-                alignment_model, # Use the dynamically loaded model
-                metadata,        # Use the dynamically loaded metadata
-                audio_data, 
-                DEVICE
-            )
-            
-            # 7. Get the final text (join all segments)
-            transcribed_text = " ".join([segment["text"] for segment in aligned_result["segments"]]).strip()
+        # 2. Call Gladia API (Assuming short audio for synchronous response)
+        response = requests.post(
+            GLADIA_API_URL, 
+            headers=headers, 
+            data=json.dumps(payload),
+            timeout=120 # Set a reasonable timeout for the API call
+        )
+        response.raise_for_status() # Raise exception for bad status codes
 
-        print(f"AI_CLASSIFIER: Aligned Transcription: '{transcribed_text}'")
+        transcription_data = response.json()
+
+        # Extract the full transcript text
+        transcribed_text = transcription_data.get("prediction", {}).get("full_transcript", "")
+
+        if not transcribed_text:
+            raise Exception("Gladia returned an empty transcript.")
+
+        print(f"AI_CLASSIFIER: Gladia Transcription: '{transcribed_text}'")
+
 
         # 8. Simple NLP (Keyword matching on *transcribed* text)
         issue_type = "other" # Default
@@ -209,7 +181,7 @@ def _process_audio_for_structure(audio_url, user_description):
             "issueType": issue_type,
             "severityScore": severity_score,
             "tags": tags,
-            "description": transcribed_text # Return the accurate, aligned transcription
+            "description": transcribed_text # Return the accurate transcription
         }
     except Exception as e:
         print(f"AI_CLASSIFIER: Error during audio processing: {e}")
@@ -224,11 +196,6 @@ def classify_image(image_url, user_description):
     return _analyze_image_for_severity(image_url)
 
 def classify_audio(audio_url, user_description):
-    """
-    Main function for audio reports.
-    """
-    # FIX: Only check for AUDIO_MODEL
-    if AUDIO_MODEL is None: 
-        return {"error": "NLP models not loaded"}, 500
+    
     
     return _process_audio_for_structure(audio_url, user_description)
