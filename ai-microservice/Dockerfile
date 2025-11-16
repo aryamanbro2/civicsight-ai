@@ -17,4 +17,4 @@ COPY . .
 # This command runs your server.
 # Your ai-server.py is already set to use the $PORT variable provided by Hugging Face
 #
-CMD ["uvicorn", "ai-server:app", "--host", "0.0.0.0", "--port", "$PORT"]
+CMD ["python", "ai-server.py"]
