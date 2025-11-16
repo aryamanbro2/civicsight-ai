@@ -9,8 +9,7 @@ RUN apt-get update && apt-get install -y ffmpeg
 
 # Copy your requirements file and install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
+RUN pip install --no-cache-dir --default-timeout=120 -r requirements.txt
 # Copy the rest of your app code (ai-server.py, ai_classifier.py, yolov8n.pt)
 COPY . .
 
