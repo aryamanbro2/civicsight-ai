@@ -40,7 +40,7 @@ def load_models():
         print("AI_CLASSIFIER: Roboflow Inference Client initialized.")
 
     # 2. Audio Model (WhisperX Transcription Model)
-    AUDIO_MODEL = whisperx.load_model("small", device=DEVICE, compute_type="float32")
+    AUDIO_MODEL = whisperx.load_model("tiny", device=DEVICE, compute_type="float16")
     print("AI_CLASSIFIER: WhisperX Transcription (small) model loaded.")
 
     # 3. FIX: Alignment model is REMOVED from startup.
