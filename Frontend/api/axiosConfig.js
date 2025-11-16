@@ -6,7 +6,7 @@ import { config } from '../src/config';
 
 // CRITICAL FIX: We assume config.API_BASE_URL is the complete, correct URL
 // (e.g., https://...github.dev/api) when running in development.
-const DEPLOYED_URL = 'https://your-render-app.onrender.com/api'; 
+const DEPLOYED_URL = 'https://civicsight-ai.onrender.com/api'; 
 
 const baseURL = __DEV__ ? config.API_BASE_URL : DEPLOYED_URL;
 
