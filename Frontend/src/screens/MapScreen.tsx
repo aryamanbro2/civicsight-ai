@@ -51,6 +51,9 @@ const MapScreen = () => {
       id: r.id,
       lat: r.location.coordinates[1],
       lng: r.location.coordinates[0],
+      // --- THIS IS THE FIX ---
+      // Send the severityScore (e.g., 7.2) in the 'priority' field
+      priority: r.severityScore 
     }));
 
     webViewRef.current?.injectJavaScript(`

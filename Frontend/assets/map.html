@@ -3,10 +3,18 @@
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<!-- Leaflet CSS -->
-<link 
-  rel="stylesheet" 
+<link
+  rel="stylesheet"
   href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+/>
+
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
+/>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
 />
 
 <style>
@@ -14,7 +22,18 @@
     height: 100%;
     margin: 0;
     padding: 0;
-    background: #000;
+    background: #121212;
+  }
+  
+  /* Make the cluster popups dark */
+  .marker-cluster-small,
+  .marker-cluster-medium,
+  .marker-cluster-large {
+    background-color: rgba(30, 30, 30, 0.8) !important;
+    border: 2px solid #BB86FC;
+  }
+  .marker-cluster span {
+    color: #FFFFFF !important;
   }
 </style>
 
@@ -23,53 +42,140 @@
 
 <div id="map"></div>
 
-<!-- Leaflet JS -->
-<script 
-  src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js">
-</script>
+<script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
 <script>
-  // initial map position (India)
+
+  // --- Map Setup ---
   var map = L.map('map', {
     zoomControl: false
   }).setView([20.5937, 78.9629], 5);
 
-  // Dark OSM tiles
+  // Free CartoDB Dark (No API Key)
   L.tileLayer(
-    "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
+    "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
     {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors'
+      maxZoom: 20, // 3. IMPROVEMENT: Increased max zoom
+      attribution: "&copy; CartoDB & OpenStreetMap contributors"
     }
   ).addTo(map);
 
-  // All markers will be sent from React Native
-  var markers = [];
+  // Add zoom controls to bottom right
+  L.control.zoom({ position: "bottomright" }).addTo(map);
 
-  // Add markers from RN
+  // --- Marker Setup ---
+
+  // 4. IMPROVEMENT: Initialize a Marker Cluster Group
+  var markerClusterGroup = L.markerClusterGroup();
+  map.addLayer(markerClusterGroup);
+
+
+  /**
+   * 5. IMPROVEMENT: Robust icon function
+   * This function correctly handles the 'severityScore' (a number) 
+   * passed from React Native and assigns the right color.
+   */
+  function getSeverityIcon(data) {
+    let score = 0;
+
+    // Check if data is a number (like 7.2)
+    if (typeof data === 'number') {
+      score = data;
+    } 
+    // Fallback check if data is a string (like "high")
+    else if (typeof data === 'string' || data instanceof String) {
+      const priority = data.trim().toLowerCase();
+      if (priority.includes('high')) {
+        score = 5;
+      } else if (priority.includes('medium')) {
+        score = 3;
+      } else {
+        score = 1;
+      }
+    }
+
+    let color = "#03dac6"; // Default: low (cyan)
+
+    // This logic mirrors your backend logic
+    if (score > 4) {
+      color = "#ff4d4d"; // High (red)
+    } else if (score > 2) {
+      color = "#ffd93d"; // Medium (yellow)
+    }
+
+    // Return the SVG marker icon
+    return L.divIcon({
+      className: "", // No extra classes
+      html: `
+        <svg width="34" height="34" viewBox="0 0 24 24">
+          <path fill="${color}" d="
+            M12 2
+            C8.1 2 5 5.1 5 9
+            c0 5.2 7 13 7 13
+            s7-7.8 7-13
+            c0-3.9-3.1-7-7-7
+            zm0 9.5
+            c-1.4 0-2.5-1.1-2.5-2.5
+            s1.1-2.5 2.5-2.5
+            s2.5 1.1 2.5 2.5
+            s-1.1 2.5-2.5 2.5z"
+          />
+        </svg>
+      `,
+      iconSize: [34, 34],
+      iconAnchor: [17, 34], // Point of the marker
+    });
+  }
+
+  // Store markers locally (now handled by cluster group)
+  var markersList = [];
+
+  // Function called by React Native to add markers
   window.addMarkers = function(markerData) {
-    // remove old markers
-    markers.forEach(m => map.removeLayer(m));
-    markers = [];
+    
+    // 6. IMPROVEMENT: Clear the cluster group, not the map
+    markerClusterGroup.clearLayers();
+    markersList = [];
 
-    markerData.forEach(m => {
-      const marker = L.marker([m.lat, m.lng])
-        .addTo(map)
-        .on("click", () => {
-          window.ReactNativeWebView.postMessage(JSON.stringify({
+    const valid = markerData.filter(m =>
+      typeof m.lat === "number" &&
+      typeof m.lng === "number"
+    );
+
+    valid.forEach(m => {
+      // 7. IMPROVEMENT: Pass 'm.priority' which now contains the severityScore
+      const marker = L.marker([m.lat, m.lng], {
+        icon: getSeverityIcon(m.priority) 
+      })
+      .on("click", () => {
+        // Send message back to React Native on click
+        window.ReactNativeWebView.postMessage(
+          JSON.stringify({
             type: "marker_press",
             reportId: m.id
-          }));
-        });
+          })
+        );
+      });
 
-      markers.push(marker);
+      // Add to our list for bounds fitting
+      markersList.push(marker);
     });
 
-    if (markers.length > 0) {
-      var group = L.featureGroup(markers);
-      map.fitBounds(group.getBounds(), { padding: [50, 50] });
+    // 8. IMPROVEMENT: Add all markers to the cluster group at once
+    markerClusterGroup.addLayers(markersList);
+
+    // Fit map to show all markers
+    if (markersList.length > 0) {
+      // 9. IMPROVEMENT: Get bounds from the cluster group
+      const groupBounds = markerClusterGroup.getBounds();
+      if (groupBounds.isValid()) {
+         map.fitBounds(groupBounds, { padding: [60, 60] });
+      }
     }
   };
+
 </script>
 
 </body>
