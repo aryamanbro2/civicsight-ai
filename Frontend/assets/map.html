@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Leaflet CSS -->
+<link 
+  rel="stylesheet" 
+  href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+/>
+
+<style>
+  html, body, #map {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background: #000;
+  }
+</style>
+
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Leaflet JS -->
+<script 
+  src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js">
+</script>
+
+<script>
+  // initial map position (India)
+  var map = L.map('map', {
+    zoomControl: false
+  }).setView([20.5937, 78.9629], 5);
+
+  // Dark OSM tiles
+  L.tileLayer(
+    "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
+    {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }
+  ).addTo(map);
+
+  // All markers will be sent from React Native
+  var markers = [];
+
+  // Add markers from RN
+  window.addMarkers = function(markerData) {
+    // remove old markers
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+
+    markerData.forEach(m => {
+      const marker = L.marker([m.lat, m.lng])
+        .addTo(map)
+        .on("click", () => {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: "marker_press",
+            reportId: m.id
+          }));
+        });
+
+      markers.push(marker);
+    });
+
+    if (markers.length > 0) {
+      var group = L.featureGroup(markers);
+      map.fitBounds(group.getBounds(), { padding: [50, 50] });
+    }
+  };
+</script>
+
+</body>
+</html>

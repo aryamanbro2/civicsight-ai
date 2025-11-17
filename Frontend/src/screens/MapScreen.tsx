@@ -13,8 +13,8 @@ import {
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { WebView } from "react-native-webview";
 import { Ionicons } from "@expo/vector-icons";
-import MapView, { Marker } from "react-native-maps";
 
 import { getAllReports, Report } from "../services/reportService";
 
@@ -40,11 +40,24 @@ type MapNavigationProp = NativeStackNavigationProp<
 const MapScreen = () => {
   const navigation = useNavigation<MapNavigationProp>();
   const insets = useSafeAreaInsets();
-  const mapRef = useRef<MapView>(null);
+  const webViewRef = useRef<WebView>(null);
 
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+
+  const sendMarkersToWebView = (validReports: Report[]) => {
+    const markerData = validReports.map((r) => ({
+      id: r.id,
+      lat: r.location.coordinates[1],
+      lng: r.location.coordinates[0],
+    }));
+
+    webViewRef.current?.injectJavaScript(`
+      window.addMarkers(${JSON.stringify(markerData)});
+      true;
+    `);
+  };
 
   const fetchAllReports = useCallback(async () => {
     setIsLoading(true);
@@ -65,17 +78,8 @@ const MapScreen = () => {
 
       setReports(validReports);
 
-      if (validReports.length > 0 && mapRef.current) {
-        const coordsList = validReports.map((r) => ({
-          latitude: r.location.coordinates[1],
-          longitude: r.location.coordinates[0],
-        }));
-
-        mapRef.current.fitToCoordinates(coordsList, {
-          edgePadding: { top: 50, right: 50, bottom: 150, left: 50 },
-          animated: true,
-        });
-      }
+      // Send markers once WebView loads
+      setTimeout(() => sendMarkersToWebView(validReports), 500);
     } catch (error) {
       console.log("Failed to fetch reports:", error);
       Alert.alert("Error", "Unable to load reports.");
@@ -90,17 +94,6 @@ const MapScreen = () => {
     }, [])
   );
 
-  const defaultInitialRegion = {
-    latitude: 20.5937,
-    longitude: 78.9629,
-    latitudeDelta: 8,
-    longitudeDelta: 8,
-  };
-
-  const handleMarkerPress = (report: Report) => {
-    setSelectedReport(report);
-  };
-
   return (
     <View style={[styles.outerContainer, { paddingTop: insets.top }]}>
       {/* Header */}
@@ -109,39 +102,24 @@ const MapScreen = () => {
         <Ionicons name="map-outline" size={30} color={DARK_COLORS.PRIMARY} />
       </View>
 
-      {/* Map */}
+      {/* WebView Map */}
       <View style={styles.mapContainer}>
-        <MapView
-          ref={mapRef}
-          style={StyleSheet.absoluteFillObject}
-          initialRegion={defaultInitialRegion}
-          onPress={() => setSelectedReport(null)}
-        >
-          {reports.map((report) => {
-            const coords = report.location.coordinates;
-            if (!coords || coords.length !== 2) return null;
+        <WebView
+          ref={webViewRef}
+          originWhitelist={["*"]}
+          source={require("../../assets/map.html")}
+          style={styles.webview}
+          onMessage={(event) => {
+            const data = JSON.parse(event.nativeEvent.data);
 
-            return (
-              <Marker
-                key={report.id}
-                coordinate={{
-                  latitude: coords[1],
-                  longitude: coords[0],
-                }}
-                pinColor={
-                  report.priority === "high"
-                    ? "#FF6B6B"
-                    : report.priority === "medium"
-                    ? "#FFD93D"
-                    : "#03DAC6"
-                }
-                onPress={() => handleMarkerPress(report)}
-              />
-            );
-          })}
-        </MapView>
+            if (data.type === "marker_press") {
+              const report = reports.find((r) => r.id === data.reportId);
+              setSelectedReport(report || null);
+            }
+          }}
+        />
 
-        {/* Loading Overlay */}
+        {/* Loading */}
         {isLoading && (
           <View style={styles.center}>
             <ActivityIndicator size="large" color={DARK_COLORS.PRIMARY} />
@@ -192,7 +170,7 @@ const MapScreen = () => {
               >
                 <Ionicons
                   name="close-circle"
-                  size={28}
+                  size={26}
                   color={DARK_COLORS.SECONDARY_TEXT}
                 />
               </TouchableOpacity>
@@ -204,15 +182,10 @@ const MapScreen = () => {
   );
 };
 
-/* ---------------- Styles ---------------- */
-
 const styles = StyleSheet.create({
   outerContainer: {
     flex: 1,
     backgroundColor: DARK_COLORS.BACKGROUND,
-  },
-  mapContainer: {
-    flex: 1,
   },
   headerContainer: {
     padding: 15,
@@ -228,11 +201,22 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "bold",
   },
+  mapContainer: {
+    flex: 1,
+  },
+  webview: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
   center: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    right: 0,
+    left: 0,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.4)",
   },
   loadingText: {
     marginTop: 10,
