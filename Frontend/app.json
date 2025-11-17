@@ -5,13 +5,14 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+
+    "assetBundlePatterns": ["**/*"],
+
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.aryamanbro.civicsightai",
@@ -19,10 +20,14 @@
         "ITSAppUsesNonExemptEncryption": false
       }
     },
+
     "android": {
+      "package": "com.aryamanbro.civicsightai",
+
       "adaptiveIcon": {
         "backgroundColor": "#ffffff"
       },
+
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
@@ -30,8 +35,14 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
-      "package": "com.aryamanbro.civicsightai"
+
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyDd1qBEmgq1THnMOmcWLhUvRUG9oM1-xX8"
+        }
+      }
     },
+
     "plugins": [
       [
         "expo-camera",
@@ -46,8 +57,10 @@
         }
       ],
       "expo-secure-store",
-      "expo-audio"
+      "expo-audio",
+      "react-native-maps"
     ],
+
     "extra": {
       "eas": {
         "projectId": "67560bd9-d762-4949-8dad-8a19958b812a"
