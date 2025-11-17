@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "CivicSight.ai",
+    "slug": "civicsight-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.aryamanbro.civicsightai"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
+      "package": "com.aryamanbro.civicsightai"
+    },
+    "plugins": [
+      "expo-camera",
+      "expo-location",
+      "expo-secure-store",
+      "expo-audio"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "67560bd9-d762-4949-8dad-8a19958b812a"
+      }
+    }
+  }
+}
