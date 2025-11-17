@@ -28,8 +28,9 @@ export default {
     android: {
       package: "com.aryamanbro.civicsightai",
       adaptiveIcon: {
-        backgroundColor: "#ffffff"
-      },
+    foregroundImage: "./assets/icon.png",
+    backgroundColor: "#ffffff"
+  },
       permissions: [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
