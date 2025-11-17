@@ -4,13 +4,12 @@ import requests
 import os
 import tempfile 
 import json 
-from inference_sdk import InferenceHTTPClient # <-- FIX: Added missing Roboflow import
+import time  # <-- FIX: Added import for polling
+from inference_sdk import InferenceHTTPClient 
 
 # --- Global Models & Device ---
-# UPDATED: Switched from local models to API keys
 GLADIA_API_KEY = os.environ.get("GLADIA_API_KEY") 
 GLADIA_API_URL = "https://api.gladia.io/v2/transcription"
-
 INFERENCE_CLIENT = None # Roboflow client
 
 # --- Roboflow Config (Loaded from .env by ai-server.py) ---
@@ -22,7 +21,6 @@ def load_models():
     """
     UPDATED: This function is now fast and lightweight.
     It only initializes API clients, not heavy local models.
-    This fixes all OOM (Out of Memory) and Timeout errors.
     """
     global INFERENCE_CLIENT
     print("AI_CLASSIFIER: Starting API client initialization...")
@@ -55,7 +53,7 @@ def _analyze_image_for_severity(image_url):
         return {"error": "Roboflow client is not configured"}
 
     try:
-        # This function's logic remains the same as your original file
+        # This function's logic remains the same
         result = INFERENCE_CLIENT.run_workflow(
             workspace_name=ROBOFLOW_WORKSPACE_NAME,
             workflow_id=ROBOFLOW_WORKFLOW_ID,
@@ -101,8 +99,7 @@ def _analyze_image_for_severity(image_url):
 
 def _process_audio_for_structure(audio_url, user_description):
     """
-    UPDATED: Sends the public audio URL to the Gladia API for transcription.
-    This fixes the 400 Bad Request error by using the correct V2 payload.
+    FIXED: Handles Gladia's asynchronous API by polling the result_url.
     """
     if not audio_url or not audio_url.startswith('http'):
         return {"error": "Invalid or missing audio URL provided."}
@@ -111,14 +108,11 @@ def _process_audio_for_structure(audio_url, user_description):
         return {"error": "Gladia API key not configured"}
 
     try:
-        # 1. Setup API Payload
+        # 1. Setup API Payload (Headers and Payload are correct)
         headers = {
             "x-gladia-key": GLADIA_API_KEY,
             "Content-Type": "application/json"
         }
-
-        # --- FIX FOR 400 BAD REQUEST ---
-        # This payload uses the correct V2 parameters from Gladia's documentation
         payload = {
             "audio_url": audio_url,
             "diarization": False,
@@ -127,55 +121,90 @@ def _process_audio_for_structure(audio_url, user_description):
                 "code_switching": False
             }
         }
-        # --- END OF FIX ---
 
-        # 2. Call Gladia API
-        response = requests.post(
+        # --- NEW ASYNC POLLING LOGIC ---
+
+        # 2. Call Gladia to INITIATE the job
+        initiate_response = requests.post(
             GLADIA_API_URL, 
             headers=headers, 
             data=json.dumps(payload),
-            timeout=120 # Keep 2-minute timeout to prevent read timeout
+            timeout=120 # Timeout for the *initial* call
         )
-        response.raise_for_status() # Raise exception for 4xx/5xx errors
-
-        transcription_data = response.json()
+        initiate_response.raise_for_status()
         
-        # Extract the full transcript text
-        transcription_result = transcription_data.get("prediction", {})
-        transcribed_text = transcription_result.get("full_transcript", "")
+        initiate_data = initiate_response.json()
+        result_url = initiate_data.get("result_url")
 
-        if not transcribed_text and transcription_result:
-             # Handle cases where transcription might be in another key
-             transcribed_text = " ".join(u.get("transcription", "") for u in transcription_result.get("utterances", []))
+        if not result_url:
+            print(f"AI_CLASSIFIER: Gladia did not return a result_url. Response: {initiate_data}")
+            raise Exception("Gladia failed to initiate job.")
 
-        if not transcribed_text:
-            print(f"AI_CLASSIFIER: Gladia returned no transcription. Full response: {transcription_data}")
-            raise Exception("Gladia returned an empty transcript.")
+        print(f"AI_CLASSIFIER: Gladia job initiated. Polling URL: {result_url}")
+
+        # 3. Poll the result_url for the final transcription
+        start_time = time.time()
+        total_timeout = 110 # Slightly less than the main 120s timeout
+        
+        while True:
+            # Check for overall timeout
+            if time.time() - start_time > total_timeout:
+                raise Exception("Gladia transcription polling timed out after 110 seconds.")
+
+            # Use a separate header for the GET request (only the key is needed)
+            poll_headers = {"x-gladia-key": GLADIA_API_KEY}
+            poll_response = requests.get(result_url, headers=poll_headers)
+            poll_response.raise_for_status()
+            poll_data = poll_response.json()
+
+            status = poll_data.get("status")
+
+            if status == "done":
+                print("AI_CLASSIFID: Gladia job done.")
+                # Parse the *final* transcription
+                transcription_result = poll_data.get("prediction", {})
+                transcribed_text = transcription_result.get("full_transcript", "")
+
+                if not transcribed_text and transcription_result:
+                    # Fallback for different response structures
+                    transcribed_text = " ".join(u.get("transcription", "") for u in transcription_result.get("utterances", []))
+                
+                if not transcribed_text:
+                    print(f"AI_CLASSIFID: Gladia returned 'done' but transcript is empty. Response: {poll_data}")
+                    raise Exception("Gladia returned an empty transcript.")
+                
+                break # Exit the loop, we have the text
+            
+            elif status == "error":
+                print(f"AI_CLASSIFIER: Gladia job failed. Response: {poll_data}")
+                raise Exception(f"Gladia processing error: {poll_data.get('error')}")
+
+            # If status is 'queued' or 'processing', wait and poll again
+            print(f"AI_CLASSIFIER: Gladia status: {status}. Polling again in 3 seconds...")
+            time.sleep(3)
+        
+        # --- END OF ASYNC POLLING LOGIC ---
 
         print(f"AI_CLASSIFIER: Gladia Transcription: '{transcribed_text}'")
 
-        # 3. Simple NLP (Keyword matching on *transcribed* text)
+        # 4. Simple NLP (Keyword matching on *transcribed* text)
         issue_type = "other" # Default
         severity_score = 3
         tags = ["voice-report", "ai-classified"]
-
         text_lower = transcribed_text.lower()
         
         if any(kw in text_lower for kw in ["pothole", "pit", "hole in the road", "road is broken", "deep hole"]):
             issue_type = "pothole"
             severity_score = 5
             tags.append("pothole")
-        
         elif any(kw in text_lower for kw in ["garbage", "trash", "waste", "dump", "pile of trash"]):
             issue_type = "garbage"
             severity_score = 4
             tags.append("garbage")
-
         elif any(kw in text_lower for kw in ["street light", "streetlight", "light is out", "lamp is broken"]):
             issue_type = "street_light"
             severity_score = 3
             tags.append("street-light")
-        
         elif not text_lower or len(text_lower) < 10:
             issue_type = "non-civic-issue" 
             tags.append("non-civic-issue")
@@ -190,10 +219,9 @@ def _process_audio_for_structure(audio_url, user_description):
         }
     except Exception as e:
         print(f"AI_CLASSIFIER: Error during audio processing: {e}")
-        # Include Gladia's response in the error if available
-        if 'response' in locals() and response.text:
-            print(f"AI_CLASSIFIER: Gladia API raw error response: {response.text}")
-            return {"error": f"Failed to process audio: {e} - Gladia Response: {response.text}"}
+        if 'poll_response' in locals() and poll_response.text:
+            print(f"AI_CLASSIFIER: Gladia API raw error response: {poll_response.text}")
+            return {"error": f"Failed to process audio: {e} - Gladia Response: {poll_response.text}"}
         return {"error": f"Failed to process audio: {e}"}
 
 # --- Main Public Functions ---
@@ -208,7 +236,5 @@ def classify_audio(audio_url, user_description):
     """
     Main function for audio reports.
     """
-    # --- FIX ---
-    # Removed the old `if AUDIO_MODEL is None:` check which caused a NameError.
-    # The API key check is now correctly handled inside _process_audio_for_structure.
+    # Removed the old `if AUDIO_MODEL is None:` check
     return _process_audio_for_structure(audio_url, user_description)

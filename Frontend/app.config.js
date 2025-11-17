@@ -7,6 +7,8 @@ export default {
     version: "1.0.0",
     orientation: "portrait",
     userInterfaceStyle: "light",
+    icon: "./assets/icon.png",
+
 
     splash: {
       resizeMode: "contain",
@@ -50,8 +52,7 @@ export default {
         locationAlwaysAndWhenInUsePermission: "Allow CivicSight.ai to use your location."
       }],
       "expo-secure-store",
-      "expo-audio",
-      "react-native-maps"
+      "expo-audio"
     ],
 
     extra: {
