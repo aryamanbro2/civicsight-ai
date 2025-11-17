@@ -32,6 +32,18 @@
       "package": "com.aryamanbro.civicsightai"
     },
     "plugins": [
+       [
+        "react-native-maps",
+        {
+          "config": {
+            "googleMaps": {
+              "android": false
+            }
+          }
+        }
+      ],
+     
+      
       "expo-camera",
       "expo-location",
       "expo-secure-store",

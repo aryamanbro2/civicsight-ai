@@ -13,9 +13,10 @@ import {
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getAllReports, Report } from "../services/reportService";
-import MapView, { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
+import MapView, { Marker } from "react-native-maps";
+
+import { getAllReports, Report } from "../services/reportService";
 
 const DARK_COLORS = {
   BACKGROUND: "#121212",
@@ -58,9 +59,7 @@ const MapScreen = () => {
           Array.isArray(coords) &&
           coords.length === 2 &&
           typeof coords[0] === "number" &&
-          typeof coords[1] === "number" &&
-          !isNaN(coords[0]) &&
-          !isNaN(coords[1])
+          typeof coords[1] === "number"
         );
       });
 
@@ -104,11 +103,13 @@ const MapScreen = () => {
 
   return (
     <View style={[styles.outerContainer, { paddingTop: insets.top }]}>
+      {/* Header */}
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>Report Map</Text>
         <Ionicons name="map-outline" size={30} color={DARK_COLORS.PRIMARY} />
       </View>
 
+      {/* Map */}
       <View style={styles.mapContainer}>
         <MapView
           ref={mapRef}
@@ -118,15 +119,7 @@ const MapScreen = () => {
         >
           {reports.map((report) => {
             const coords = report.location.coordinates;
-
-            if (
-              !coords ||
-              coords.length !== 2 ||
-              typeof coords[0] !== "number" ||
-              typeof coords[1] !== "number"
-            ) {
-              return null;
-            }
+            if (!coords || coords.length !== 2) return null;
 
             return (
               <Marker
@@ -148,6 +141,7 @@ const MapScreen = () => {
           })}
         </MapView>
 
+        {/* Loading Overlay */}
         {isLoading && (
           <View style={styles.center}>
             <ActivityIndicator size="large" color={DARK_COLORS.PRIMARY} />
@@ -155,6 +149,7 @@ const MapScreen = () => {
           </View>
         )}
 
+        {/* Selected Report Card */}
         {selectedReport && (
           <View style={styles.cardContainer}>
             <View style={styles.selectedCard}>
@@ -208,6 +203,8 @@ const MapScreen = () => {
     </View>
   );
 };
+
+/* ---------------- Styles ---------------- */
 
 const styles = StyleSheet.create({
   outerContainer: {
