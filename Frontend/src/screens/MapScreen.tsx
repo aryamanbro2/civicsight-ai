@@ -1,6 +1,6 @@
 // Frontend/src/screens/MapScreen.tsx
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,12 +10,19 @@ import {
   Image,
   TouchableOpacity,
 } from "react-native";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import {
+ 
+  NativeStackNavigationProp,
+} from "@react-navigation/native-stack";
+
+import{
+   useNavigation,
+  useFocusEffect,
+} from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
+import { Asset } from "expo-asset";
 import { Ionicons } from "@expo/vector-icons";
-
 import { getAllReports, Report } from "../services/reportService";
 
 const DARK_COLORS = {
@@ -45,19 +52,36 @@ const MapScreen = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [mapHtmlUri, setMapHtmlUri] = useState<string | null>(null);
+
+  // Load HTML asset (Fix for APK build)
+  useEffect(() => {
+    const loadMapHTML = async () => {
+      try {
+        const asset = Asset.fromModule(require("../../assets/map.html"));
+        await asset.downloadAsync();
+        setMapHtmlUri(asset.localUri || asset.uri);
+      } catch (err) {
+        console.error("Failed to load map.html:", err);
+        Alert.alert("Error", "Unable to load map view.");
+      }
+    };
+
+    loadMapHTML();
+  }, []);
 
   const sendMarkersToWebView = (validReports: Report[]) => {
     const markerData = validReports.map((r) => ({
       id: r.id,
       lat: r.location.coordinates[1],
       lng: r.location.coordinates[0],
-      // --- THIS IS THE FIX ---
-      // Send the severityScore (e.g., 7.2) in the 'priority' field
-      priority: r.severityScore 
+      priority: r.severityScore,
     }));
 
     webViewRef.current?.injectJavaScript(`
-      window.addMarkers(${JSON.stringify(markerData)});
+      if (window.addMarkers) {
+        window.addMarkers(${JSON.stringify(markerData)});
+      }
       true;
     `);
   };
@@ -68,21 +92,17 @@ const MapScreen = () => {
     try {
       const response = await getAllReports();
 
-      const validReports = response.reports.filter((r: Report) => {
-        const coords = r.location?.coordinates;
-        return (
-          coords &&
-          Array.isArray(coords) &&
-          coords.length === 2 &&
-          typeof coords[0] === "number" &&
-          typeof coords[1] === "number"
-        );
-      });
+      const validReports = response.reports.filter(
+        (r: Report) =>
+          r.location?.coordinates &&
+          r.location.coordinates.length === 2 &&
+          typeof r.location.coordinates[0] === "number"
+      );
 
       setReports(validReports);
 
       // Send markers once WebView loads
-      setTimeout(() => sendMarkersToWebView(validReports), 500);
+      setTimeout(() => sendMarkersToWebView(validReports), 700);
     } catch (error) {
       console.log("Failed to fetch reports:", error);
       Alert.alert("Error", "Unable to load reports.");
@@ -99,92 +119,106 @@ const MapScreen = () => {
 
   return (
     <View style={[styles.outerContainer, { paddingTop: insets.top }]}>
+
       {/* Header */}
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>Report Map</Text>
         <Ionicons name="map-outline" size={30} color={DARK_COLORS.PRIMARY} />
       </View>
 
-      {/* WebView Map */}
+      {/* 🔥 WebView Map */}
       <View style={styles.mapContainer}>
-        <WebView
-          ref={webViewRef}
-          originWhitelist={["*"]}
-          source={require("../../assets/map.html")}
-          style={styles.webview}
-          onMessage={(event) => {
-            const data = JSON.parse(event.nativeEvent.data);
-
-            if (data.type === "marker_press") {
-              const report = reports.find((r) => r.id === data.reportId);
-              setSelectedReport(report || null);
-            }
-          }}
-        />
-
-        {/* Loading */}
-        {isLoading && (
+        {mapHtmlUri ? (
+          <WebView
+            ref={webViewRef}
+            originWhitelist={["*"]}
+            source={{ uri: mapHtmlUri }}
+            style={styles.webview}
+            javaScriptEnabled
+            domStorageEnabled
+            allowFileAccess
+            allowUniversalAccessFromFileURLs
+            onLoadEnd={() => sendMarkersToWebView(reports)}
+            onMessage={(event) => {
+              const data = JSON.parse(event.nativeEvent.data);
+              if (data.type === "marker_press") {
+                const report = reports.find((r) => r.id === data.reportId);
+                setSelectedReport(report || null);
+              }
+            }}
+          />
+        ) : (
           <View style={styles.center}>
             <ActivityIndicator size="large" color={DARK_COLORS.PRIMARY} />
-            <Text style={styles.loadingText}>Loading reports...</Text>
-          </View>
-        )}
-
-        {/* Selected Report Card */}
-        {selectedReport && (
-          <View style={styles.cardContainer}>
-            <View style={styles.selectedCard}>
-              {selectedReport.imageUrl ? (
-                <Image
-                  source={{ uri: selectedReport.imageUrl }}
-                  style={styles.cardImage}
-                />
-              ) : (
-                <View style={[styles.cardImage, styles.audioPlaceholder]}>
-                  <Ionicons
-                    name="mic-outline"
-                    size={40}
-                    color={DARK_COLORS.SECONDARY_TEXT}
-                  />
-                </View>
-              )}
-
-              <View style={styles.cardContent}>
-                <Text style={styles.cardTitle}>{selectedReport.issueType}</Text>
-                <Text style={styles.cardLocation}>
-                  {selectedReport.location.address}
-                </Text>
-
-                <TouchableOpacity
-                  style={styles.detailsButton}
-                  onPress={() =>
-                    navigation.navigate("ReportDetail", {
-                      report: selectedReport,
-                    })
-                  }
-                >
-                  <Text style={styles.detailsButtonText}>View Details</Text>
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setSelectedReport(null)}
-              >
-                <Ionicons
-                  name="close-circle"
-                  size={26}
-                  color={DARK_COLORS.SECONDARY_TEXT}
-                />
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.loadingText}>Preparing map...</Text>
           </View>
         )}
       </View>
+
+      {/* Loading */}
+      {isLoading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={DARK_COLORS.PRIMARY} />
+          <Text style={styles.loadingText}>Loading reports...</Text>
+        </View>
+      )}
+
+      {/* Selected Report Card */}
+      {selectedReport && (
+        <View style={styles.cardContainer}>
+          <View style={styles.selectedCard}>
+            {selectedReport.imageUrl ? (
+              <Image
+                source={{ uri: selectedReport.imageUrl }}
+                style={styles.cardImage}
+              />
+            ) : (
+              <View style={[styles.cardImage, styles.audioPlaceholder]}>
+                <Ionicons
+                  name="mic-outline"
+                  size={40}
+                  color={DARK_COLORS.SECONDARY_TEXT}
+                />
+              </View>
+            )}
+
+            <View style={styles.cardContent}>
+              <Text style={styles.cardTitle}>{selectedReport.issueType}</Text>
+              <Text style={styles.cardLocation}>
+                {selectedReport.location.address}
+              </Text>
+
+              <TouchableOpacity
+                style={styles.detailsButton}
+                onPress={() =>
+                  navigation.navigate("ReportDetail", {
+                    report: selectedReport,
+                  })
+                }
+              >
+                <Text style={styles.detailsButtonText}>View Details</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setSelectedReport(null)}
+            >
+              <Ionicons
+                name="close-circle"
+                size={26}
+                color={DARK_COLORS.SECONDARY_TEXT}
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
     </View>
   );
 };
 
+// Styles
 const styles = StyleSheet.create({
   outerContainer: {
     flex: 1,
@@ -212,6 +246,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
   },
   center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingOverlay: {
     position: "absolute",
     top: 0,
     bottom: 0,

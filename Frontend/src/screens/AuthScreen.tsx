@@ -5,7 +5,7 @@ import EmailAuthForm from '../components/auth/EmailAuthForm';
 // import SocialAuthButton from '../components/auth/SocialAuthButton'; // No longer needed
 import { useAuth } from '../context/AuthContext';
 import { LoginData, RegisterData } from '../services/authService';
-
+import {COLORS} from '../styles/theme';
 // --- DARK THEME CONSTANTS ---
 const DARK_COLORS = {
   BACKGROUND: '#121212', 
