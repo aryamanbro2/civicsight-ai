@@ -48,11 +48,6 @@
       "expo-location",
       "expo-secure-store",
       "expo-audio"
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "67560bd9-d762-4949-8dad-8a19958b812a"
-      }
-    }
+    ]
   }
 }
